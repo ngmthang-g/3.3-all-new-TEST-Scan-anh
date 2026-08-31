@@ -21,6 +21,9 @@ runpy.run_path('test_scan/apply_filter_v4.py', run_name='__main__')
 v4 = Path('src/image_scan_filter_v4.inl')
 if not v4.exists():
     raise SystemExit('FILTER V4 generator did not create src/image_scan_filter_v4.inl')
+
+# Small compile-safe correction kept separate so v3/v4 generator history stays auditable.
+runpy.run_path('test_scan/fix_filter_v4.py', run_name='__main__')
 impl = v4.read_text(encoding='utf-8')
 
 required = [
