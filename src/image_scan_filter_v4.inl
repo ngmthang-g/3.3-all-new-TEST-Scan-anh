@@ -90,7 +90,7 @@ struct ClickStep {
     int y = -1;
     int baseW = 0;
     int baseH = 0;
-    int delayMs = 1500;
+    int delayMs = 500;
     int repeat = 1;
     bool valid = false;
 };
@@ -515,7 +515,7 @@ void SaveStepEditor(State& s) {
     ClickStep& step = s.config.steps[static_cast<std::size_t>(row)];
     const int x = ReadInt(s.hwnd, IDC_STEP_X, -1);
     const int y = ReadInt(s.hwnd, IDC_STEP_Y, -1);
-    step.delayMs = std::clamp(ReadInt(s.hwnd, IDC_STEP_DELAY, step.delayMs), 300, 10000);
+    step.delayMs = std::clamp(ReadInt(s.hwnd, IDC_STEP_DELAY, step.delayMs), 50, 10000);
     step.repeat = 1;
     int cw = 0, ch = 0;
     if (x >= 0 && y >= 0 && CurrentClientSize(s.target.gameWindow, cw, ch) && x < cw && y < ch) {
@@ -948,7 +948,7 @@ bool ValidateFilter(const State& s,std::wstring& error){
     for(std::size_t i=0;i<s.config.steps.size();++i){
         const ClickStep& step=s.config.steps[i];
         if(!step.valid||step.baseW<=0||step.baseH<=0){error=L"CLICK "+std::to_wstring(i+1)+L" chưa gán tọa F8";return false;}
-        if(step.delayMs<300||step.delayMs>10000){error=L"Delay CLICK "+std::to_wstring(i+1)+L" không hợp lệ";return false;}
+        if(step.delayMs<50||step.delayMs>10000){error=L"Delay CLICK "+std::to_wstring(i+1)+L" không hợp lệ (50-10000 ms)";return false;}
     }
     if(!s.config.afterDiscard.valid||s.config.afterDiscard.baseW<=0||s.config.afterDiscard.baseH<=0){
         error=L"chưa gán CLICK SAU VỨT bằng F8";return false;
@@ -1013,13 +1013,15 @@ void TestAfterDiscard(State& s){
     SetStatus(s.hwnd,L"TEST CLICK SAU VỨT "+std::wstring(ok?L"PASS • ":L"FAIL • ")+std::to_wstring(x)+L","+std::to_wstring(y)+(error.empty()?L"":L" • "+error));
 }
 
-int SlotTimeoutMs(const State& s){
-    if(s.slotIndex<s.config.steps.size())return std::clamp(s.config.steps[s.slotIndex].delayMs,300,10000);
-    return 1500;
+int StepDelayMs(const State& s){
+    if(s.slotIndex<s.config.steps.size())return std::clamp(s.config.steps[s.slotIndex].delayMs,50,10000);
+    return 500;
 }
 
+constexpr UINT kStateTimeoutMs = 5000;
+
 void ArmRunPhase(State& s,RunPhase phase,UINT firstProbeDelay=40){
-    const ULONGLONG now=GetTickCount64();s.runPhase=phase;s.nextProbeTick=now+firstProbeDelay;s.phaseDeadlineTick=now+static_cast<ULONGLONG>(SlotTimeoutMs(s));
+    const ULONGLONG now=GetTickCount64();s.runPhase=phase;s.nextProbeTick=now+firstProbeDelay;s.phaseDeadlineTick=now+static_cast<ULONGLONG>(kStateTimeoutMs);
 }
 
 void FinishRun(State& s,const std::wstring& status){
@@ -1059,6 +1061,7 @@ void ProcessRunTick(State& s){
             if(close.found){
                 const int cx=close.x+s.closeTpl.width/2,cy=close.y+s.closeTpl.height/2;
                 if(!RawClick(s,cx,cy,frame.width,frame.height,error)){FinishRun(s,L"CLICK TÂM X FAIL • "+error);return;}
+                Sleep(static_cast<DWORD>(StepDelayMs(s)));
                 SetStatus(s.hwnd,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" • ẢNH 1 PASS "+ScoreText(good.score)+L" • X PASS "+ScoreText(close.score)+L" • đợi X biến mất");
                 ArmRunPhase(s,RunPhase::WaitCloseGone,40);return;
             }
@@ -1071,6 +1074,7 @@ void ProcessRunTick(State& s){
         if(discard.found){
             const int dx=discard.x+s.discardTpl.width/2,dy=discard.y+s.discardTpl.height/2;
             if(!RawClick(s,dx,dy,frame.width,frame.height,error)){FinishRun(s,L"CLICK TÂM VỨT FAIL • "+error);return;}
+            Sleep(static_cast<DWORD>(StepDelayMs(s)));
             SetStatus(s.hwnd,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" • ẢNH 1 SAI • VỨT PASS "+ScoreText(discard.score)+L" • đợi nút VỨT biến mất");
             ArmRunPhase(s,RunPhase::WaitDiscardGone,40);return;
         }
@@ -1083,6 +1087,7 @@ void ProcessRunTick(State& s){
         if(!ScanDiscardOnFrame(s,frame,discard,error)){FinishRun(s,L"ROI VỨT FAIL • "+error);return;}
         if(!discard.found){
             if(!ClickAfterDiscard(s,error)){FinishRun(s,L"CLICK SAU VỨT FAIL • "+error);return;}
+            Sleep(static_cast<DWORD>(StepDelayMs(s)));
             SetStatus(s.hwnd,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" • VỨT đã biến mất → click SAU VỨT → đợi popup đóng");
             ArmRunPhase(s,RunPhase::WaitPopupGoneAfterConfirm,40);return;
         }
@@ -1097,6 +1102,7 @@ void ProcessRunTick(State& s){
         if(!good.found&&!discard.found&&!close.found){
             ++s.discardCount;
             if(!ClickCurrentSlot(s,error)){FinishRun(s,L"LẶP CLICK "+std::to_wstring(s.slotIndex+1)+L" FAIL • "+error);return;}
+            Sleep(static_cast<DWORD>(StepDelayMs(s)));
             SetStatus(s.hwnd,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" • popup đã đóng • đã vứt "+std::to_wstring(s.discardCount)+L" món → LẶP LẠI CÙNG Ô");
             ArmRunPhase(s,RunPhase::WaitItemReady,40);return;
         }
@@ -1109,8 +1115,9 @@ void ProcessRunTick(State& s){
         if(!ScanCloseOnFrame(s,frame,close,error)){FinishRun(s,L"ROI DẤU X FAIL • "+error);return;}
         if(!close.found){
             ++s.slotIndex;s.discardCount=0;
-            if(s.slotIndex>=s.config.steps.size()){FinishRun(s,L"LỌC "+std::to_wstring(s.config.steps.size())+L" CLICK HOÀN TẤT • 1 capture/probe • 3 ROI riêng • không Sleep khóa UI");return;}
+            if(s.slotIndex>=s.config.steps.size()){FinishRun(s,L"LỌC "+std::to_wstring(s.config.steps.size())+L" CLICK HOÀN TẤT • 1 capture/probe • 3 ROI riêng • Sleep sau mỗi thao tác");return;}
             if(!ClickCurrentSlot(s,error)){FinishRun(s,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" FAIL • "+error);return;}
+            Sleep(static_cast<DWORD>(StepDelayMs(s)));
             SetStatus(s.hwnd,L"DẤU X đã biến mất → SANG CLICK "+std::to_wstring(s.slotIndex+1));
             ArmRunPhase(s,RunPhase::WaitItemReady,40);return;
         }
@@ -1129,8 +1136,9 @@ void RunTest(State& s) {
 
     s.runningChain=true;s.slotIndex=0;s.discardCount=0;s.runPhase=RunPhase::Idle;EnableWindow(GetDlgItem(s.hwnd,IDC_TEST),FALSE);
     if(!ClickCurrentSlot(s,error)){FinishRun(s,L"CLICK 1 FAIL • "+error);return;}
+    Sleep(static_cast<DWORD>(StepDelayMs(s)));
     ArmRunPhase(s,RunPhase::WaitItemReady,40);SetTimer(s.hwnd,kRunTimer,25,nullptr);
-    SetStatus(s.hwnd,L"V4 START • CLICK 1 → probe theo trạng thái • 1 PrintWindow/probe • ROI ẢNH1/VỨT/X riêng • Timeout fail-closed");
+    SetStatus(s.hwnd,L"V4 SLEEP START • CLICK 1 → Sleep Delay → probe 1 frame • ROI ẢNH1/VỨT/X riêng");
 }
 
 void AddRoiEditors(State& s,int y,int xId,int yId,int wId,int hId,int pickId,int previewId,int fullId,
@@ -1170,16 +1178,16 @@ void BuildControls(State& s) {
     AddRoiEditors(s,203,IDC_CLOSE_X,IDC_CLOSE_Y,IDC_CLOSE_W,IDC_CLOSE_H,IDC_CLOSE_REGION,IDC_CLOSE_PREVIEW,IDC_CLOSE_FULL,s.config.closeRoi.x,s.config.closeRoi.y,s.config.closeRoi.w,s.config.closeRoi.h,L"ROI DẤU X");
     Add(s.hwnd,L"STATIC",L"V4: 3 ROI khác nhau nhưng mọi scan trong cùng một probe dùng CHUNG 1 frame PrintWindow.",SS_LEFT|SS_CENTERIMAGE,675,203,330,24,0);
 
-    Add(s.hwnd,L"BUTTON",L"DANH SÁCH CLICK Ô ĐỒ • mặc định 20 • +THÊM / -XÓA không giới hạn cứng • Timeout không phải Sleep",BS_GROUPBOX,18,238,987,330,0);
+    Add(s.hwnd,L"BUTTON",L"DANH SÁCH CLICK Ô ĐỒ • mặc định 20 • +THÊM / -XÓA không giới hạn cứng • Delay = Sleep sau mỗi thao tác",BS_GROUPBOX,18,238,987,330,0);
     s.stepList=Add(s.hwnd,WC_LISTVIEWW,L"",LVS_REPORT|LVS_SINGLESEL|LVS_SHOWSELALWAYS|WS_BORDER,32,263,959,205,IDC_STEP_LIST);
     ListView_SetExtendedListViewStyle(s.stepList,LVS_EX_FULLROWSELECT|LVS_EX_GRIDLINES|LVS_EX_DOUBLEBUFFER);
-    AddColumn(s.stepList,0,45,L"#");AddColumn(s.stepList,1,80,L"X");AddColumn(s.stepList,2,80,L"Y");AddColumn(s.stepList,3,110,L"Base size");AddColumn(s.stepList,4,100,L"Timeout ms");AddColumn(s.stepList,5,515,L"Logic");
+    AddColumn(s.stepList,0,45,L"#");AddColumn(s.stepList,1,80,L"X");AddColumn(s.stepList,2,80,L"Y");AddColumn(s.stepList,3,110,L"Base size");AddColumn(s.stepList,4,100,L"Delay ms");AddColumn(s.stepList,5,515,L"Logic");
 
     Add(s.hwnd,L"STATIC",L"X:",SS_LEFT|SS_CENTERIMAGE,32,480,20,27,0);Add(s.hwnd,L"EDIT",L"",WS_BORDER|ES_NUMBER|ES_CENTER,54,480,64,27,IDC_STEP_X);
     Add(s.hwnd,L"STATIC",L"Y:",SS_LEFT|SS_CENTERIMAGE,126,480,20,27,0);Add(s.hwnd,L"EDIT",L"",WS_BORDER|ES_NUMBER|ES_CENTER,148,480,64,27,IDC_STEP_Y);
-    Add(s.hwnd,L"STATIC",L"Timeout:",SS_LEFT|SS_CENTERIMAGE,222,480,55,27,0);Add(s.hwnd,L"EDIT",L"1500",WS_BORDER|ES_NUMBER|ES_CENTER,279,480,70,27,IDC_STEP_DELAY);
+    Add(s.hwnd,L"STATIC",L"Delay:",SS_LEFT|SS_CENTERIMAGE,222,480,55,27,0);Add(s.hwnd,L"EDIT",L"500",WS_BORDER|ES_NUMBER|ES_CENTER,279,480,70,27,IDC_STEP_DELAY);
     Add(s.hwnd,L"BUTTON",L"LƯU CLICK",BS_PUSHBUTTON,360,480,105,27,IDC_STEP_SAVE);Add(s.hwnd,L"BUTTON",L"LẤY TỌA F8",BS_PUSHBUTTON,474,480,130,27,IDC_STEP_CAPTURE);Add(s.hwnd,L"BUTTON",L"TEST CLICK ẨN",BS_PUSHBUTTON,613,480,130,27,IDC_STEP_TEST);
-    Add(s.hwnd,L"STATIC",L"Mặc định timeout 1500ms; máy nhanh thấy UI sớm thì xử lý ngay, không chờ đủ.",SS_LEFT|SS_CENTERIMAGE,752,480,235,27,0);
+    Add(s.hwnd,L"STATIC",L"Mặc định 500ms; Sleep sau MỖI click để game không nhận thao tác quá nhanh.",SS_LEFT|SS_CENTERIMAGE,752,480,235,27,0);
 
     Add(s.hwnd,L"STATIC",L"CLICK SAU VỨT:",SS_LEFT|SS_CENTERIMAGE,32,522,112,27,0);Add(s.hwnd,L"STATIC",L"X",SS_CENTER|SS_CENTERIMAGE,146,522,16,27,0);
     Add(s.hwnd,L"EDIT",s.config.afterDiscard.valid?std::to_wstring(s.config.afterDiscard.x).c_str():L"",WS_BORDER|ES_NUMBER|ES_CENTER,164,522,65,27,IDC_AFTER_X);
@@ -1188,8 +1196,8 @@ void BuildControls(State& s) {
     Add(s.hwnd,L"STATIC",L"Sau VỨT: tool chờ ảnh VỨT biến mất rồi mới click tọa này.",SS_LEFT|SS_CENTERIMAGE,640,522,345,27,0);
 
     Add(s.hwnd,L"STATIC",L"STATE: CLICK N → probe 1 frame → GOOD? {scan X cùng frame} : {scan VỨT cùng frame} → chờ dấu hiệu UI biến đổi → bước tiếp.",SS_LEFT|SS_CENTERIMAGE,32,548,955,20,0);
-    Add(s.hwnd,L"BUTTON",L"CHẠY TEST LỌC CLICK ẨN • V4 OPTIMIZED",BS_DEFPUSHBUTTON,18,582,987,39,IDC_TEST);
-    Add(s.hwnd,L"STATIC",L"Sẵn sàng. ESC = dừng khẩn. Không Sleep khóa UI; timer chỉ probe khi đến lượt.",SS_LEFT|SS_CENTERIMAGE|WS_BORDER,18,632,987,90,IDC_STATUS);
+    Add(s.hwnd,L"BUTTON",L"CHẠY TEST LỌC CLICK ẨN • V4 SLEEP",BS_DEFPUSHBUTTON,18,582,987,39,IDC_TEST);
+    Add(s.hwnd,L"STATIC",L"Sẵn sàng. ESC = dừng khẩn. V4 SLEEP: mỗi RAW click đều chờ Delay ms trước bước tiếp theo.",SS_LEFT|SS_CENTERIMAGE|WS_BORDER,18,632,987,90,IDC_STATUS);
     Add(s.hwnd,L"BUTTON",L"ĐÓNG",BS_PUSHBUTTON,885,735,120,30,IDCANCEL);
     RefreshStepList(s);
 }
@@ -1252,7 +1260,7 @@ void RunDialog(const Target& target){
     wc.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);wc.lpszClassName=kClassName;
     if(!RegisterClassExW(&wc)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)return;
     EnableWindow(target.owner,FALSE);
-    HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,kClassName,L"TEST LỌC ĐỒ ẢNH ẨN • V4 OPTIMIZED • CLICK ĐỘNG",
+    HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,kClassName,L"TEST LỌC ĐỒ ẢNH ẨN • V4 SLEEP • CLICK ĐỘNG",
                               WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
                               CW_USEDEFAULT,CW_USEDEFAULT,1000,755,target.owner,nullptr,GetModuleHandleW(nullptr),&state);
     if(!hwnd){EnableWindow(target.owner,TRUE);return;}
