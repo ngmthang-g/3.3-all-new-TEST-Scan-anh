@@ -1,4 +1,4 @@
 #include "image_scan_test.h"
 
-// TEST SCAN + CLICK ẨN v2 • implementation keeps PrintWindow + FindTemplate.
-#include "image_scan_test_v2.inl"
+// TEST FILTER v3 • proven HWND PrintWindow + ROI matcher + RAW hidden clicks.
+#include "image_scan_filter_v3.inl"
