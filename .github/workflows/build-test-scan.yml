@@ -43,8 +43,10 @@ jobs:
                   'ScanRoi discardRoi', 'ScanRoi closeRoi', 'RunPhase::WaitItemReady',
                   'ProcessRunTick', 'MỖI PROBE CHỈ CHỤP HWND ĐÚNG 1 LẦN',
                   'ScanGoodOnFrame', 'ScanDiscardOnFrame', 'ScanCloseOnFrame',
-                  'ROI VỨT', 'ROI DẤU X', 'Timeout ms', 'CLICK SAU VỨT',
-                  's.slotIndex>=s.config.steps.size()', 'không có giới hạn cứng'
+                  'ROI VỨT', 'ROI DẤU X', 'Delay ms', 'CLICK SAU VỨT',
+                  's.slotIndex>=s.config.steps.size()', 'không có giới hạn cứng',
+                  'int StepDelayMs(', 'kStateTimeoutMs = 5000',
+                  'Sleep(static_cast<DWORD>(StepDelayMs(s)))', 'V4 SLEEP'
               ],
               'CMakeLists.txt': ['src/image_scan_test.cpp', 'windowscodecs ole32'],
           }
@@ -54,10 +56,12 @@ jobs:
                   if needle not in text:
                       raise SystemExit(f'{path}: missing {needle}')
           v4 = Path('src/image_scan_filter_v4.inl').read_text(encoding='utf-8')
-          for forbidden in ['Sleep(', 'kMaxClickSteps', 'phải có đúng 20 tọa click', 'BỘ LỌC cố định 20 CLICK']:
+          for forbidden in ['kMaxClickSteps', 'phải có đúng 20 tọa click', 'BỘ LỌC cố định 20 CLICK', 'SlotTimeoutMs(']:
               if forbidden in v4:
                   raise SystemExit(f'v4 still contains forbidden legacy behavior: {forbidden}')
-          print('TEST FILTER v4 dynamic source contracts PASS')
+          if v4.count('Sleep(static_cast<DWORD>(StepDelayMs(s)))') < 6:
+              raise SystemExit('v4 does not Sleep after every gameplay click action')
+          print('TEST FILTER v4 Sleep source contracts PASS')
 
       - name: Configure x64 Release
         shell: powershell
@@ -105,7 +109,7 @@ jobs:
       - name: Upload TEST FILTER v4 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AUTO-Than-Long-v4.9-TEST-FILTER-V4
+          name: AUTO-Than-Long-v4.9-TEST-FILTER-V4-SLEEP
           path: |
             dist/AUTO_Than_Long_v4.9_TEST_FILTER_V4.exe
             dist/ThanLongCleanRouteBridge.dll
@@ -128,6 +132,6 @@ jobs:
           git add -f dist/SHA256SUMS_TEST_FILTER_V4.txt
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
-            git commit -m "feat: optimize FILTER v4 and allow dynamic click list [skip ci]"
+            git commit -m "fix: restore per-action Sleep pacing in FILTER v4 [skip ci]"
             git push origin HEAD:main
           }
