@@ -30,7 +30,7 @@ fixed = r'''void AddRoiEditors(State& s,int y,int xId,int yId,int wId,int hId,in
 '''
 text = text[:start] + fixed + text[end:]
 
-# User-approved v4 follow-up: keep 20 as the initial default only; remove all hard limits.
+# User-approved dynamic click list: keep 20 only as the initial default, never as a hard cap.
 replacements = [
     ('constexpr std::size_t kMaxClickSteps = 20;',
      'constexpr std::size_t kDefaultInitialSteps = 20;'),
@@ -39,17 +39,17 @@ replacements = [
     ('if(s.config.steps.size()!=kMaxClickSteps){error=L"phải có đúng 20 tọa click";return false;}',
      'if(s.config.steps.empty()){error=L"danh sách CLICK đang rỗng";return false;}'),
     ('if(s.slotIndex>=kMaxClickSteps){FinishRun(s,L"LỌC 20 CLICK HOÀN TẤT • 1 capture/probe • 3 ROI riêng • không Sleep khóa UI");return;}',
-     'if(s.slotIndex>=s.config.steps.size()){FinishRun(s,L"LỌC "+std::to_wstring(s.config.steps.size())+L" CLICK HOÀN TẤT • 1 capture/probe • 3 ROI riêng • không Sleep khóa UI");return;}'),
+     'if(s.slotIndex>=s.config.steps.size()){FinishRun(s,L"LỌC "+std::to_wstring(s.config.steps.size())+L" CLICK HOÀN TẤT • 1 capture/probe • 3 ROI riêng • Sleep sau mỗi thao tác");return;}'),
     ('L"20 TỌA CLICK Ô ĐỒ • Timeout là thời gian tối đa chờ trạng thái, KHÔNG phải Sleep"',
-     'L"DANH SÁCH CLICK Ô ĐỒ • mặc định 20 • +THÊM / -XÓA không giới hạn cứng • Timeout không phải Sleep"'),
+     'L"DANH SÁCH CLICK Ô ĐỒ • mặc định 20 • +THÊM / -XÓA không giới hạn cứng • Delay = Sleep sau mỗi thao tác"'),
     ('L"CHẠY TEST LỌC 20 CLICK ẨN • V4 OPTIMIZED"',
-     'L"CHẠY TEST LỌC CLICK ẨN • V4 OPTIMIZED"'),
+     'L"CHẠY TEST LỌC CLICK ẨN • V4 SLEEP"'),
     ('L"F8: chọn một ô 1-20 trước"',
      'L"F8: chọn một dòng CLICK trước"'),
     ('State state{};state.target=target;state.config=g_lastConfig;RebaseForCurrentClient(state.config,target.gameWindow);if(state.config.steps.size()<kMaxClickSteps)state.config.steps.resize(kMaxClickSteps);if(state.config.steps.size()>kMaxClickSteps)state.config.steps.resize(kMaxClickSteps);',
      'State state{};state.target=target;state.config=g_lastConfig;RebaseForCurrentClient(state.config,target.gameWindow);if(state.config.steps.empty())state.config.steps.resize(kDefaultInitialSteps);'),
     ('L"TEST LỌC ĐỒ ẢNH ẨN • 20 CLICK • v3"',
-     'L"TEST LỌC ĐỒ ẢNH ẨN • V4 OPTIMIZED • CLICK ĐỘNG"'),
+     'L"TEST LỌC ĐỒ ẢNH ẨN • V4 SLEEP • CLICK ĐỘNG"'),
 ]
 for old, new in replacements:
     if old not in text:
@@ -64,7 +64,6 @@ text = text.replace(anchor,
                     '    s.config.steps.push_back(step);g_lastConfig=s.config;RefreshStepList(s,static_cast<int>(s.config.steps.size()-1));\n'
                     '    SetStatus(s.hwnd,L"Đã thêm CLICK "+std::to_wstring(s.config.steps.size())+L" • không có giới hạn cứng");\n}', 1)
 
-# Safety: ignore config-changing button commands while the timer/state chain is running.
 cmd_anchor = '        case WM_COMMAND:\n            switch(LOWORD(wp)){'
 if cmd_anchor not in text:
     raise SystemExit('FILTER v4 WM_COMMAND anchor missing')
@@ -73,13 +72,79 @@ text = text.replace(cmd_anchor,
                     '            if(s->runningChain && LOWORD(wp)!=IDCANCEL){SetStatus(s->hwnd,L"Đang chạy FILTER v4 • ESC để dừng trước khi sửa cấu hình");return 0;}\n'
                     '            switch(LOWORD(wp)){', 1)
 
-for forbidden in ['kMaxClickSteps', 'BỘ LỌC cố định 20 CLICK', 'phải có đúng 20 tọa click', 'LỌC 20 CLICK HOÀN TẤT']:
+# User-requested rollback: fixed Sleep delay after EVERY click/action.
+# Keep the optimized 1-capture/probe + 3-ROI scan path; only action pacing goes back to fixed delay.
+sleep_replacements = [
+    ('    int delayMs = 1500;', '    int delayMs = 500;'),
+    ('step.delayMs = std::clamp(ReadInt(s.hwnd, IDC_STEP_DELAY, step.delayMs), 300, 10000);',
+     'step.delayMs = std::clamp(ReadInt(s.hwnd, IDC_STEP_DELAY, step.delayMs), 50, 10000);'),
+    ('if(step.delayMs<300||step.delayMs>10000){error=L"Delay CLICK "+std::to_wstring(i+1)+L" không hợp lệ";return false;}',
+     'if(step.delayMs<50||step.delayMs>10000){error=L"Delay CLICK "+std::to_wstring(i+1)+L" không hợp lệ (50-10000 ms)";return false;}'),
+    ('int SlotTimeoutMs(const State& s){\n    if(s.slotIndex<s.config.steps.size())return std::clamp(s.config.steps[s.slotIndex].delayMs,300,10000);\n    return 1500;\n}',
+     'int StepDelayMs(const State& s){\n    if(s.slotIndex<s.config.steps.size())return std::clamp(s.config.steps[s.slotIndex].delayMs,50,10000);\n    return 500;\n}\n\nconstexpr UINT kStateTimeoutMs = 5000;'),
+    ('const ULONGLONG now=GetTickCount64();s.runPhase=phase;s.nextProbeTick=now+firstProbeDelay;s.phaseDeadlineTick=now+static_cast<ULONGLONG>(SlotTimeoutMs(s));',
+     'const ULONGLONG now=GetTickCount64();s.runPhase=phase;s.nextProbeTick=now+firstProbeDelay;s.phaseDeadlineTick=now+static_cast<ULONGLONG>(kStateTimeoutMs);'),
+    ('AddColumn(s.stepList,0,45,L"#");AddColumn(s.stepList,1,80,L"X");AddColumn(s.stepList,2,80,L"Y");AddColumn(s.stepList,3,110,L"Base size");AddColumn(s.stepList,4,100,L"Timeout ms");AddColumn(s.stepList,5,515,L"Logic");',
+     'AddColumn(s.stepList,0,45,L"#");AddColumn(s.stepList,1,80,L"X");AddColumn(s.stepList,2,80,L"Y");AddColumn(s.stepList,3,110,L"Base size");AddColumn(s.stepList,4,100,L"Delay ms");AddColumn(s.stepList,5,515,L"Logic");'),
+    ('Add(s.hwnd,L"STATIC",L"Timeout:",SS_LEFT|SS_CENTERIMAGE,222,480,55,27,0);Add(s.hwnd,L"EDIT",L"1500",WS_BORDER|ES_NUMBER|ES_CENTER,279,480,70,27,IDC_STEP_DELAY);',
+     'Add(s.hwnd,L"STATIC",L"Delay:",SS_LEFT|SS_CENTERIMAGE,222,480,55,27,0);Add(s.hwnd,L"EDIT",L"500",WS_BORDER|ES_NUMBER|ES_CENTER,279,480,70,27,IDC_STEP_DELAY);'),
+    ('Add(s.hwnd,L"STATIC",L"Mặc định timeout 1500ms; máy nhanh thấy UI sớm thì xử lý ngay, không chờ đủ.",SS_LEFT|SS_CENTERIMAGE,752,480,235,27,0);',
+     'Add(s.hwnd,L"STATIC",L"Mặc định 500ms; Sleep sau MỖI click để game không nhận thao tác quá nhanh.",SS_LEFT|SS_CENTERIMAGE,752,480,235,27,0);'),
+    ('Add(s.hwnd,L"STATIC",L"Sẵn sàng. ESC = dừng khẩn. Không Sleep khóa UI; timer chỉ probe khi đến lượt.",SS_LEFT|SS_CENTERIMAGE|WS_BORDER,18,632,987,90,IDC_STATUS);',
+     'Add(s.hwnd,L"STATIC",L"Sẵn sàng. ESC = dừng khẩn. V4 SLEEP: mỗi RAW click đều chờ Delay ms trước bước tiếp theo.",SS_LEFT|SS_CENTERIMAGE|WS_BORDER,18,632,987,90,IDC_STATUS);'),
+    ('SetStatus(s.hwnd,L"V4 START • CLICK 1 → probe theo trạng thái • 1 PrintWindow/probe • ROI ẢNH1/VỨT/X riêng • Timeout fail-closed");',
+     'SetStatus(s.hwnd,L"V4 SLEEP START • CLICK 1 → Sleep Delay → probe 1 frame • ROI ẢNH1/VỨT/X riêng");'),
+]
+for old, new in sleep_replacements:
+    if old not in text:
+        raise SystemExit(f'FILTER v4 Sleep anchor missing: {old[:100]}')
+    text = text.replace(old, new, 1)
+
+# Insert Sleep after every gameplay click action. Scans stay on the optimized shared frame.
+action_replacements = [
+    ('if(!RawClick(s,cx,cy,frame.width,frame.height,error)){FinishRun(s,L"CLICK TÂM X FAIL • "+error);return;}\n                SetStatus',
+     'if(!RawClick(s,cx,cy,frame.width,frame.height,error)){FinishRun(s,L"CLICK TÂM X FAIL • "+error);return;}\n                Sleep(static_cast<DWORD>(StepDelayMs(s)));\n                SetStatus'),
+    ('if(!RawClick(s,dx,dy,frame.width,frame.height,error)){FinishRun(s,L"CLICK TÂM VỨT FAIL • "+error);return;}\n            SetStatus',
+     'if(!RawClick(s,dx,dy,frame.width,frame.height,error)){FinishRun(s,L"CLICK TÂM VỨT FAIL • "+error);return;}\n            Sleep(static_cast<DWORD>(StepDelayMs(s)));\n            SetStatus'),
+    ('if(!ClickAfterDiscard(s,error)){FinishRun(s,L"CLICK SAU VỨT FAIL • "+error);return;}\n            SetStatus',
+     'if(!ClickAfterDiscard(s,error)){FinishRun(s,L"CLICK SAU VỨT FAIL • "+error);return;}\n            Sleep(static_cast<DWORD>(StepDelayMs(s)));\n            SetStatus'),
+    ('if(!ClickCurrentSlot(s,error)){FinishRun(s,L"LẶP CLICK "+std::to_wstring(s.slotIndex+1)+L" FAIL • "+error);return;}\n            SetStatus',
+     'if(!ClickCurrentSlot(s,error)){FinishRun(s,L"LẶP CLICK "+std::to_wstring(s.slotIndex+1)+L" FAIL • "+error);return;}\n            Sleep(static_cast<DWORD>(StepDelayMs(s)));\n            SetStatus'),
+    ('if(!ClickCurrentSlot(s,error)){FinishRun(s,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" FAIL • "+error);return;}\n            SetStatus(s.hwnd,L"DẤU X đã biến mất',
+     'if(!ClickCurrentSlot(s,error)){FinishRun(s,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" FAIL • "+error);return;}\n            Sleep(static_cast<DWORD>(StepDelayMs(s)));\n            SetStatus(s.hwnd,L"DẤU X đã biến mất'),
+    ('if(!ClickCurrentSlot(s,error)){FinishRun(s,L"CLICK 1 FAIL • "+error);return;}\n    ArmRunPhase',
+     'if(!ClickCurrentSlot(s,error)){FinishRun(s,L"CLICK 1 FAIL • "+error);return;}\n    Sleep(static_cast<DWORD>(StepDelayMs(s)));\n    ArmRunPhase'),
+]
+for old, new in action_replacements:
+    if old not in text:
+        raise SystemExit(f'FILTER v4 action Sleep anchor missing: {old[:110]}')
+    text = text.replace(old, new, 1)
+
+# Update remaining UI/status wording from adaptive/no-Sleep terminology.
+text = text.replace('Timeout là thời gian tối đa chờ trạng thái', 'Delay là Sleep sau mỗi thao tác')
+text = text.replace('Timeout fail-closed', 'Sleep theo Delay + fail-closed')
+text = text.replace('không Sleep khóa UI', 'Sleep sau mỗi thao tác')
+text = text.replace('Timeout ms', 'Delay ms')
+
+for forbidden in ['kMaxClickSteps', 'BỘ LỌC cố định 20 CLICK', 'phải có đúng 20 tọa click', 'LỌC 20 CLICK HOÀN TẤT', 'SlotTimeoutMs(']:
     if forbidden in text:
-        raise SystemExit(f'FILTER v4 unlimited cleanup failed: {forbidden}')
-for required in ['kDefaultInitialSteps = 20', 's.slotIndex>=s.config.steps.size()', 'không có giới hạn cứng']:
+        raise SystemExit(f'FILTER v4 cleanup failed: {forbidden}')
+for required in [
+    'kDefaultInitialSteps = 20',
+    's.slotIndex>=s.config.steps.size()',
+    'không có giới hạn cứng',
+    'int StepDelayMs(',
+    'kStateTimeoutMs = 5000',
+    'Sleep(static_cast<DWORD>(StepDelayMs(s)))',
+    'Delay ms',
+    'V4 SLEEP',
+]:
     if required not in text:
-        raise SystemExit(f'FILTER v4 unlimited required marker missing: {required}')
+        raise SystemExit(f'FILTER v4 required marker missing: {required}')
+if text.count('Sleep(static_cast<DWORD>(StepDelayMs(s)))') < 6:
+    raise SystemExit('FILTER v4 expected Sleep after every action')
 
 p.write_text(text, encoding='utf-8')
 print('FILTER v4 ROI editor fix PASS')
-print('FILTER v4 unlimited click-list patch PASS • default 20, add/remove dynamic')
+print('FILTER v4 dynamic click-list PASS • default 20, add/remove unlimited')
+print('FILTER v4 SLEEP PASS • fixed per-action delay restored • default 500ms')
