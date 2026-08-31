@@ -1,5 +1,12 @@
 from pathlib import Path
 import runpy
+import sys
+
+# GitHub Windows runner may default stdout to cp1252; generator status strings contain Vietnamese.
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 
 # Keep v2 as the proven visual/capture base, generate v3 compatibility first,
 # then derive v4 optimized runtime from v3 without touching AUTO core/bridge.
