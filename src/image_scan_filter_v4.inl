@@ -23,7 +23,7 @@ constexpr UINT kPwRenderFullContent = 0x00000002u;
 constexpr UINT_PTR kF8PollTimer = 91;
 constexpr UINT_PTR kRunTimer = 92;
 constexpr UINT kProbeIntervalMs = 80;
-constexpr std::size_t kMaxClickSteps = 20;
+constexpr std::size_t kDefaultInitialSteps = 20;
 
 constexpr int IDC_TEMPLATE = 1001;
 constexpr int IDC_PICK = 1002;
@@ -866,9 +866,9 @@ void ResetCloseRegion(State& s){ResetNamedRegion(s,s.config.closeRoi,IDC_CLOSE_X
 
 void AddStep(State& s) {
     SaveStepEditor(s);
-    if(s.config.steps.size()>=kMaxClickSteps){SetStatus(s.hwnd,L"BỘ LỌC cố định 20 CLICK");return;}
     ClickStep step{};int cw=0,ch=0;if(CurrentClientSize(s.target.gameWindow,cw,ch)){step.baseW=cw;step.baseH=ch;}
     s.config.steps.push_back(step);g_lastConfig=s.config;RefreshStepList(s,static_cast<int>(s.config.steps.size()-1));
+    SetStatus(s.hwnd,L"Đã thêm CLICK "+std::to_wstring(s.config.steps.size())+L" • không có giới hạn cứng");
 }
 
 void DeleteStep(State& s) {
@@ -890,7 +890,7 @@ void SaveSelectedStep(State& s){
 }
 
 void ArmF8(State& s){
-    const int row=SelectedStep(s);if(row<0||row>=static_cast<int>(s.config.steps.size())){SetStatus(s.hwnd,L"F8: chọn một ô 1-20 trước");return;}
+    const int row=SelectedStep(s);if(row<0||row>=static_cast<int>(s.config.steps.size())){SetStatus(s.hwnd,L"F8: chọn một dòng CLICK trước");return;}
     s.captureRow=row;s.f8WasDown=(GetAsyncKeyState(VK_F8)&0x8000)!=0;SetTimer(s.hwnd,kF8PollTimer,30,nullptr);
     SetStatus(s.hwnd,L"ĐÃ ARM F8 CHO CLICK "+std::to_wstring(row+1)+L" • đưa chuột vào đúng ô đồ trong GAME rồi F8");
 }
@@ -944,7 +944,7 @@ bool ValidateFilter(const State& s,std::wstring& error){
     if(s.config.templatePath.empty()){error=L"chưa chọn ẢNH 1 (đồ đúng)";return false;}
     if(s.config.discardTemplatePath.empty()){error=L"chưa chọn ảnh NÚT VỨT";return false;}
     if(s.config.closeTemplatePath.empty()){error=L"chưa chọn ảnh DẤU X";return false;}
-    if(s.config.steps.size()!=kMaxClickSteps){error=L"phải có đúng 20 tọa click";return false;}
+    if(s.config.steps.empty()){error=L"danh sách CLICK đang rỗng";return false;}
     for(std::size_t i=0;i<s.config.steps.size();++i){
         const ClickStep& step=s.config.steps[i];
         if(!step.valid||step.baseW<=0||step.baseH<=0){error=L"CLICK "+std::to_wstring(i+1)+L" chưa gán tọa F8";return false;}
@@ -1109,7 +1109,7 @@ void ProcessRunTick(State& s){
         if(!ScanCloseOnFrame(s,frame,close,error)){FinishRun(s,L"ROI DẤU X FAIL • "+error);return;}
         if(!close.found){
             ++s.slotIndex;s.discardCount=0;
-            if(s.slotIndex>=kMaxClickSteps){FinishRun(s,L"LỌC 20 CLICK HOÀN TẤT • 1 capture/probe • 3 ROI riêng • không Sleep khóa UI");return;}
+            if(s.slotIndex>=s.config.steps.size()){FinishRun(s,L"LỌC "+std::to_wstring(s.config.steps.size())+L" CLICK HOÀN TẤT • 1 capture/probe • 3 ROI riêng • không Sleep khóa UI");return;}
             if(!ClickCurrentSlot(s,error)){FinishRun(s,L"CLICK "+std::to_wstring(s.slotIndex+1)+L" FAIL • "+error);return;}
             SetStatus(s.hwnd,L"DẤU X đã biến mất → SANG CLICK "+std::to_wstring(s.slotIndex+1));
             ArmRunPhase(s,RunPhase::WaitItemReady,40);return;
@@ -1170,7 +1170,7 @@ void BuildControls(State& s) {
     AddRoiEditors(s,203,IDC_CLOSE_X,IDC_CLOSE_Y,IDC_CLOSE_W,IDC_CLOSE_H,IDC_CLOSE_REGION,IDC_CLOSE_PREVIEW,IDC_CLOSE_FULL,s.config.closeRoi.x,s.config.closeRoi.y,s.config.closeRoi.w,s.config.closeRoi.h,L"ROI DẤU X");
     Add(s.hwnd,L"STATIC",L"V4: 3 ROI khác nhau nhưng mọi scan trong cùng một probe dùng CHUNG 1 frame PrintWindow.",SS_LEFT|SS_CENTERIMAGE,675,203,330,24,0);
 
-    Add(s.hwnd,L"BUTTON",L"20 TỌA CLICK Ô ĐỒ • Timeout là thời gian tối đa chờ trạng thái, KHÔNG phải Sleep",BS_GROUPBOX,18,238,987,330,0);
+    Add(s.hwnd,L"BUTTON",L"DANH SÁCH CLICK Ô ĐỒ • mặc định 20 • +THÊM / -XÓA không giới hạn cứng • Timeout không phải Sleep",BS_GROUPBOX,18,238,987,330,0);
     s.stepList=Add(s.hwnd,WC_LISTVIEWW,L"",LVS_REPORT|LVS_SINGLESEL|LVS_SHOWSELALWAYS|WS_BORDER,32,263,959,205,IDC_STEP_LIST);
     ListView_SetExtendedListViewStyle(s.stepList,LVS_EX_FULLROWSELECT|LVS_EX_GRIDLINES|LVS_EX_DOUBLEBUFFER);
     AddColumn(s.stepList,0,45,L"#");AddColumn(s.stepList,1,80,L"X");AddColumn(s.stepList,2,80,L"Y");AddColumn(s.stepList,3,110,L"Base size");AddColumn(s.stepList,4,100,L"Timeout ms");AddColumn(s.stepList,5,515,L"Logic");
@@ -1188,7 +1188,7 @@ void BuildControls(State& s) {
     Add(s.hwnd,L"STATIC",L"Sau VỨT: tool chờ ảnh VỨT biến mất rồi mới click tọa này.",SS_LEFT|SS_CENTERIMAGE,640,522,345,27,0);
 
     Add(s.hwnd,L"STATIC",L"STATE: CLICK N → probe 1 frame → GOOD? {scan X cùng frame} : {scan VỨT cùng frame} → chờ dấu hiệu UI biến đổi → bước tiếp.",SS_LEFT|SS_CENTERIMAGE,32,548,955,20,0);
-    Add(s.hwnd,L"BUTTON",L"CHẠY TEST LỌC 20 CLICK ẨN • V4 OPTIMIZED",BS_DEFPUSHBUTTON,18,582,987,39,IDC_TEST);
+    Add(s.hwnd,L"BUTTON",L"CHẠY TEST LỌC CLICK ẨN • V4 OPTIMIZED",BS_DEFPUSHBUTTON,18,582,987,39,IDC_TEST);
     Add(s.hwnd,L"STATIC",L"Sẵn sàng. ESC = dừng khẩn. Không Sleep khóa UI; timer chỉ probe khi đến lượt.",SS_LEFT|SS_CENTERIMAGE|WS_BORDER,18,632,987,90,IDC_STATUS);
     Add(s.hwnd,L"BUTTON",L"ĐÓNG",BS_PUSHBUTTON,885,735,120,30,IDCANCEL);
     RefreshStepList(s);
@@ -1210,6 +1210,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             return 0;
         }
         case WM_COMMAND:
+            if(s->runningChain && LOWORD(wp)!=IDCANCEL){SetStatus(s->hwnd,L"Đang chạy FILTER v4 • ESC để dừng trước khi sửa cấu hình");return 0;}
             switch(LOWORD(wp)){
                 case IDC_PICK:PickTemplate(*s);return 0;
                 case IDC_PICK_DISCARD:PickDiscardTemplate(*s);return 0;
@@ -1246,12 +1247,12 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 
 void RunDialog(const Target& target){
     if(!target.owner||!target.gameWindow)return;
-    State state{};state.target=target;state.config=g_lastConfig;RebaseForCurrentClient(state.config,target.gameWindow);if(state.config.steps.size()<kMaxClickSteps)state.config.steps.resize(kMaxClickSteps);if(state.config.steps.size()>kMaxClickSteps)state.config.steps.resize(kMaxClickSteps);
+    State state{};state.target=target;state.config=g_lastConfig;RebaseForCurrentClient(state.config,target.gameWindow);if(state.config.steps.empty())state.config.steps.resize(kDefaultInitialSteps);
     WNDCLASSEXW wc{};wc.cbSize=sizeof(wc);wc.lpfnWndProc=WndProc;wc.hInstance=GetModuleHandleW(nullptr);wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
     wc.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);wc.lpszClassName=kClassName;
     if(!RegisterClassExW(&wc)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)return;
     EnableWindow(target.owner,FALSE);
-    HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,kClassName,L"TEST LỌC ĐỒ ẢNH ẨN • 20 CLICK • v3",
+    HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,kClassName,L"TEST LỌC ĐỒ ẢNH ẨN • V4 OPTIMIZED • CLICK ĐỘNG",
                               WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
                               CW_USEDEFAULT,CW_USEDEFAULT,1000,755,target.owner,nullptr,GetModuleHandleW(nullptr),&state);
     if(!hwnd){EnableWindow(target.owner,TRUE);return;}
