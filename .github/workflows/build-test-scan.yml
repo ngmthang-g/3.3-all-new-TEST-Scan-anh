@@ -39,11 +39,12 @@ jobs:
               'src/protocol.h': ['ClickInternalPointRawTest = 29'],
               'src/image_scan_test.cpp': ['image_scan_filter_v4.inl'],
               'src/image_scan_filter_v4.inl': [
-                  'PrintWindow(', 'FindTemplate(', 'kMaxClickSteps = 20', 'kRunTimer = 92',
+                  'PrintWindow(', 'FindTemplate(', 'kDefaultInitialSteps = 20', 'kRunTimer = 92',
                   'ScanRoi discardRoi', 'ScanRoi closeRoi', 'RunPhase::WaitItemReady',
                   'ProcessRunTick', 'MỖI PROBE CHỈ CHỤP HWND ĐÚNG 1 LẦN',
                   'ScanGoodOnFrame', 'ScanDiscardOnFrame', 'ScanCloseOnFrame',
-                  'ROI VỨT', 'ROI DẤU X', 'Timeout ms', 'CLICK SAU VỨT'
+                  'ROI VỨT', 'ROI DẤU X', 'Timeout ms', 'CLICK SAU VỨT',
+                  's.slotIndex>=s.config.steps.size()', 'không có giới hạn cứng'
               ],
               'CMakeLists.txt': ['src/image_scan_test.cpp', 'windowscodecs ole32'],
           }
@@ -53,9 +54,10 @@ jobs:
                   if needle not in text:
                       raise SystemExit(f'{path}: missing {needle}')
           v4 = Path('src/image_scan_filter_v4.inl').read_text(encoding='utf-8')
-          if 'Sleep(' in v4:
-              raise SystemExit('v4 still contains blocking Sleep()')
-          print('TEST FILTER v4 source contracts PASS')
+          for forbidden in ['Sleep(', 'kMaxClickSteps', 'phải có đúng 20 tọa click', 'BỘ LỌC cố định 20 CLICK']:
+              if forbidden in v4:
+                  raise SystemExit(f'v4 still contains forbidden legacy behavior: {forbidden}')
+          print('TEST FILTER v4 dynamic source contracts PASS')
 
       - name: Configure x64 Release
         shell: powershell
@@ -126,6 +128,6 @@ jobs:
           git add -f dist/SHA256SUMS_TEST_FILTER_V4.txt
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
-            git commit -m "feat: add optimized TEST FILTER v4 + x64 artifacts [skip ci]"
+            git commit -m "feat: optimize FILTER v4 and allow dynamic click list [skip ci]"
             git push origin HEAD:main
           }
