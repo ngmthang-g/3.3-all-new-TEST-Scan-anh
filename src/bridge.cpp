@@ -2023,6 +2023,17 @@ bool ClickInternalPoint(int normalizedX, int normalizedY, Response& response,
     return true;
 }
 
+bool ClickInternalPointRawTest(int normalizedX, int normalizedY, Response& response,
+                               wchar_t* detail, std::size_t cap) {
+    // TEST SCAN PoC only: deliberately bypass ResolveClasses/SafeForAction so the
+    // experiment measures image recognition -> InputSync click without AUTO state gates.
+    // InvokeInternalPointClick still enforces InputSync's own drag ownership contract.
+    if (!InvokeInternalPointClick(normalizedX, normalizedY, detail, cap)) return false;
+    response.resultCode = static_cast<std::int32_t>(ActionResult::ActionInvoked);
+    SetText(detail, cap, L"RAW TEST InputSync PASS: TryClickUI → EndUIDrag • không SafeForAction");
+    return true;
+}
+
 bool ReadRectArea(Il2CppObject* rectTransform, float& area) {
     area = 0.0f;
     Il2CppClass* klass = rectTransform ? g_api.object_get_class(rectTransform) : nullptr;
@@ -3120,6 +3131,9 @@ void ProcessRequest() {
             case Command::ClickInternalPoint:
                 ok = ClickInternalPoint(g_shared->request.arg0, g_shared->request.arg1,
                                         r, detail, _countof(detail)); break;
+            case Command::ClickInternalPointRawTest:
+                ok = ClickInternalPointRawTest(g_shared->request.arg0, g_shared->request.arg1,
+                                               r, detail, _countof(detail)); break;
             case Command::BeginBackgroundTreatment:
                 ok = BeginBackgroundTreatment(g_shared->request.arg0, r, detail, _countof(detail)); break;
             case Command::AdvanceBackgroundTreatment:

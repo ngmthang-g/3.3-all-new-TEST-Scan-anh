@@ -37,6 +37,7 @@
 #include "dungeon_logic.h"
 #include "dungeon_v45_logic.h"
 #include "dungeon_presets.h"
+#include "image_scan_test.h"
 
 using namespace cleanroute;
 using namespace cleanroute_logic;
@@ -46,7 +47,7 @@ using inventory_filter_logic::RuleAction;
 
 namespace {
 
-constexpr wchar_t kTitle[] = L"AUTO Thần Long đa tính năng Pro v4.9";
+constexpr wchar_t kTitle[] = L"AUTO Thần Long đa tính năng Pro v4.9 • TEST SCAN ẢNH";
 constexpr int kTreatmentNpcResId = 339;
 constexpr wchar_t kGameModule[] = L"GameAssembly.dll";
 constexpr UINT_PTR kTimer = 1;
@@ -131,6 +132,7 @@ constexpr int kRotateWindowMax = 180;
 
 constexpr int IDC_CLIENT_LIST = 100;
 constexpr int IDC_SCAN = 101;
+constexpr int IDC_TEST_IMAGE_SCAN = 106;
 constexpr int IDC_START_CHECKED = 102;
 constexpr int IDC_STOP_CHECKED = 103;
 constexpr int IDC_SELECTED = 104;
@@ -2648,6 +2650,43 @@ private:
         if(autoPkLoop_){autoPkCurrentStep_=FirstEnabledAutoPkStep();autoPkStepPass_=1;autoPkEnterPhase_=0;autoPkDueTick_=now+static_cast<DWORD>(step.delayMs);for(auto& p:accounts_)if(p->pk.active)ResetAutoPkAccountStep(*p);Log(L"AUTO PK LOOP • quay về bước đầu.");} else StopAutoPk(L"hoàn tất toàn bộ chuỗi");
     }
 
+    void OpenImageScanTest() {
+        Account* account = SelectedAccount();
+        if (!account) { Log(L"TEST SCAN ẢNH: hãy chọn 1 acc trong danh sách client trước."); return; }
+        if (!account->game.window || !IsWindow(account->game.window)) {
+            LogAccount(*account, L"TEST SCAN ẢNH: HWND game không còn tồn tại.");
+            return;
+        }
+        std::wstring attachError;
+        if (!EnsureAttach(*account, attachError)) {
+            LogAccount(*account, L"TEST SCAN ẢNH: không attach được bridge • " + attachError);
+            return;
+        }
+
+        image_scan_test::Target target{};
+        target.owner = hwnd_;
+        target.gameWindow = account->game.window;
+        target.accountLabel = AccountTag(*account);
+        target.context = account;
+        target.hiddenClick = [](void* context, int x, int y, int clientW, int clientH, std::wstring& detail) -> bool {
+            Account* a = static_cast<Account*>(context);
+            if (!a || !a->bridge.Attached()) { detail = L"bridge chưa attach"; return false; }
+            const int nx = fixed_slot_sell_logic::NormalizeClientCoordinate(x, clientW);
+            const int ny = fixed_slot_sell_logic::NormalizeClientCoordinate(y, clientH);
+            if (nx < 0 || ny < 0) { detail = L"không chuẩn hóa được tọa độ match"; return false; }
+            Response response{};
+            std::wstring error;
+            if (!a->bridge.Call(Command::ClickInternalPointRawTest, nx, ny, 0, response, error, 1800)) {
+                detail = error;
+                return false;
+            }
+            detail = response.detail[0] ? response.detail : L"TryClickUI → EndUIDrag PASS";
+            return true;
+        };
+        LogAccount(*account, L"MỞ TEST SCAN ẢNH • capture đúng HWND client • PASS ảnh sẽ RAW hidden click, không dùng AUTO state.");
+        image_scan_test::RunDialog(target);
+    }
+
     void BuildUi() {
         HFONT font = reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
         auto addFont = [font](HWND h){ if (h) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE); };
@@ -2760,6 +2799,8 @@ private:
         addFont(Make(L"BUTTON", L"XUẤT TẤT CẢ", BS_PUSHBUTTON, 678, 628, 145, 27, IDC_EXPORT_CLICK_CONFIG));
         addFont(Make(L"BUTTON", L"NHẬP TẤT CẢ", BS_PUSHBUTTON, 831, 628, 145, 27, IDC_IMPORT_CLICK_CONFIG));
         inventoryFilterOpenButton_ = Make(L"BUTTON", L"LỌC ĐỒ TAY NẢI", BS_PUSHBUTTON, 837, 656, 186, 24, IDC_BAG_FILTER_OPEN); addFont(inventoryFilterOpenButton_);
+        addFont(Make(L"BUTTON", L"TEST SCAN ẢNH", BS_PUSHBUTTON, 18, 656, 165, 24, IDC_TEST_IMAGE_SCAN));
+        addFont(Make(L"STATIC", L"PoC: chọn ảnh + vùng X/Y/W/H → match PASS → RAW TryClickUI/EndUIDrag", 0, 192, 656, 630, 24, 0));
 
         enableSell_ = Make(L"BUTTON", L"AUTO BÁN ĐỒ KHI TÚI FULL", BS_AUTOCHECKBOX, 18, 712, 220, 25, IDC_ENABLE_SELL); addFont(enableSell_);
         addFont(Make(L"STATIC", L"NPC bán:", 0, 250, 715, 65, 22, 0));
@@ -10939,6 +10980,9 @@ private:
                     case IDC_SCAN:
                         if (mainTabIndex_ == 1 && autoPkRunning_) StopAutoPk(L"quét lại client");
                         ScanClients();
+                        break;
+                    case IDC_TEST_IMAGE_SCAN:
+                        OpenImageScanTest();
                         break;
                     case IDC_TRADE_ROLE:
                         if (HIWORD(wp) == CBN_SELCHANGE) ApplySelectedTradeRole();

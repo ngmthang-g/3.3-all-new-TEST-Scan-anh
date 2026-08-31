@@ -43,6 +43,7 @@ enum class Command : std::uint32_t {
     ClickDialogText = 26,
     ReadDungeonProgress = 27,
     ReadDungeonActivityBoard = 28,
+    ClickInternalPointRawTest = 29,
 };
 
 enum class TravelSemantic : std::int32_t {

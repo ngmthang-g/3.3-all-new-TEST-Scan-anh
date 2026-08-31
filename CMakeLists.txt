@@ -16,10 +16,10 @@ target_include_directories(ThanLongCleanRouteBridge PRIVATE src)
 target_compile_definitions(ThanLongCleanRouteBridge PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(ThanLongCleanRouteBridge PRIVATE user32 kernel32)
 
-add_executable(ThanLongItemConsolidator WIN32 src/controller.cpp src/telegram_notifier.cpp src/telegram_account_filter.cpp resources/app.rc)
+add_executable(ThanLongItemConsolidator WIN32 src/controller.cpp src/image_scan_test.cpp src/telegram_notifier.cpp src/telegram_account_filter.cpp resources/app.rc)
 target_include_directories(ThanLongItemConsolidator PRIVATE src)
 target_compile_definitions(ThanLongItemConsolidator PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00)
-target_link_libraries(ThanLongItemConsolidator PRIVATE comctl32 comdlg32 user32 kernel32 gdi32 winhttp crypt32)
+target_link_libraries(ThanLongItemConsolidator PRIVATE comctl32 comdlg32 user32 kernel32 gdi32 windowscodecs ole32 winhttp crypt32)
 target_link_options(ThanLongItemConsolidator PRIVATE /MANIFEST:NO)
 
 add_executable(route_logic_tests src/route_logic_test.cpp)
