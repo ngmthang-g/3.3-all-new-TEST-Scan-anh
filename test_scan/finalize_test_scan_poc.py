@@ -22,8 +22,10 @@ v4 = Path('src/image_scan_filter_v4.inl')
 if not v4.exists():
     raise SystemExit('FILTER V4 generator did not create src/image_scan_filter_v4.inl')
 
-# Compile-safe ROI correction + dynamic click list + user-requested per-action Sleep pacing.
+# Compile-safe ROI correction + dynamic click list + fixed Sleep pacing.
 runpy.run_path('test_scan/fix_filter_v4.py', run_name='__main__')
+# User-approved: separate configurable delay for CLICK N / VỨT / SAU VỨT / DẤU X.
+runpy.run_path('test_scan/fix_filter_v4_delay_controls.py', run_name='__main__')
 impl = v4.read_text(encoding='utf-8')
 
 required = [
@@ -46,6 +48,17 @@ required = [
     'Sleep(static_cast<DWORD>(StepDelayMs(s)))',
     'Delay ms',
     'V4 SLEEP',
+    'IDC_DELAY_DISCARD = 1070',
+    'IDC_DELAY_AFTER_DISCARD = 1071',
+    'IDC_DELAY_CLOSE = 1072',
+    'discardClickDelayMs',
+    'afterDiscardClickDelayMs',
+    'closeClickDelayMs',
+    'DelayKind::Discard',
+    'DelayKind::AfterDiscard',
+    'DelayKind::Close',
+    'L"+ THÊM"',
+    'L"- XÓA"',
 ]
 for needle in required:
     if needle not in impl:
@@ -56,7 +69,7 @@ for forbidden in ['kMaxClickSteps', 'phải có đúng 20 tọa click', 'BỘ L�
 if impl.count('Sleep(static_cast<DWORD>(StepDelayMs(s)))') < 6:
     raise SystemExit('FILTER V4 must Sleep after every gameplay click action')
 
-wrapper = '''#include "image_scan_test.h"\n\n// TEST FILTER v4 • 1 PrintWindow/probe + 3 independent ROI + dynamic click list + fixed Sleep after every action.\n#include "image_scan_filter_v4.inl"\n'''
+wrapper = '''#include "image_scan_test.h"\n\n// TEST FILTER v4 • 1 PrintWindow/probe + 3 independent ROI + dynamic click list + separate fixed Sleep delay for every click type.\n#include "image_scan_filter_v4.inl"\n'''
 Path('src/image_scan_test.cpp').write_text(wrapper, encoding='utf-8')
 
-print('TEST FILTER v4 finalize PASS • dynamic clicks • 1 capture/probe • 3 ROI • per-action Sleep default 500ms')
+print('TEST FILTER v4 finalize PASS • dynamic clicks • 1 capture/probe • 3 ROI • separate fixed Sleep delays for CLICK N / VỨT / SAU VỨT / X')
