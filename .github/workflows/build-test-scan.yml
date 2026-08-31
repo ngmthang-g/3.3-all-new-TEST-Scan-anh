@@ -1,4 +1,4 @@
-name: Build TEST FILTER v3
+name: Build TEST FILTER v4
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 jobs:
-  build-test-filter:
+  build-test-filter-v4:
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -21,15 +21,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply proven TEST SCAN base and FILTER v3
+      - name: Apply proven base and FILTER v4
         shell: powershell
         run: |
           python test_scan/apply_test_scan_poc.py
           if ($LASTEXITCODE -ne 0) { throw 'apply TEST SCAN base failed' }
           python test_scan/finalize_test_scan_poc.py
-          if ($LASTEXITCODE -ne 0) { throw 'finalize FILTER v3 failed' }
+          if ($LASTEXITCODE -ne 0) { throw 'finalize FILTER v4 failed' }
 
-      - name: Verify FILTER v3 source contracts
+      - name: Verify FILTER v4 source contracts
         shell: python
         run: |
           from pathlib import Path
@@ -37,12 +37,13 @@ jobs:
               'src/controller.cpp': ['TEST SCAN ẢNH', 'OpenImageScanTest()', 'Command::ClickInternalPointRawTest'],
               'src/bridge.cpp': ['ClickInternalPointRawTest(', 'RAW TEST InputSync PASS', 'case Command::ClickInternalPointRawTest:'],
               'src/protocol.h': ['ClickInternalPointRawTest = 29'],
-              'src/image_scan_test.cpp': ['image_scan_filter_v3.inl'],
-              'src/image_scan_filter_v3.inl': [
-                  'PrintWindow(', 'FindTemplate(', 'kMaxClickSteps = 20',
-                  'ẢNH 1 • ĐỒ ĐÚNG', 'NÚT VỨT • scan rồi click đúng tâm',
-                  'DẤU X • scan rồi click đúng tâm', 'CLICK SAU VỨT',
-                  'LẶP LẠI CLICK', 'GetAsyncKeyState(VK_ESCAPE)'
+              'src/image_scan_test.cpp': ['image_scan_filter_v4.inl'],
+              'src/image_scan_filter_v4.inl': [
+                  'PrintWindow(', 'FindTemplate(', 'kMaxClickSteps = 20', 'kRunTimer = 92',
+                  'ScanRoi discardRoi', 'ScanRoi closeRoi', 'RunPhase::WaitItemReady',
+                  'ProcessRunTick', 'MỖI PROBE CHỈ CHỤP HWND ĐÚNG 1 LẦN',
+                  'ScanGoodOnFrame', 'ScanDiscardOnFrame', 'ScanCloseOnFrame',
+                  'ROI VỨT', 'ROI DẤU X', 'Timeout ms', 'CLICK SAU VỨT'
               ],
               'CMakeLists.txt': ['src/image_scan_test.cpp', 'windowscodecs ole32'],
           }
@@ -51,7 +52,10 @@ jobs:
               for needle in needles:
                   if needle not in text:
                       raise SystemExit(f'{path}: missing {needle}')
-          print('TEST FILTER v3 source contracts PASS')
+          v4 = Path('src/image_scan_filter_v4.inl').read_text(encoding='utf-8')
+          if 'Sleep(' in v4:
+              raise SystemExit('v4 still contains blocking Sleep()')
+          print('TEST FILTER v4 source contracts PASS')
 
       - name: Configure x64 Release
         shell: powershell
@@ -82,46 +86,46 @@ jobs:
             if($LASTEXITCODE -ne 0){throw "$t failed"}
           }
 
-      - name: Stage TEST FILTER v3 binaries and source
+      - name: Stage TEST FILTER v4 binaries and source
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item build/Release/ThanLongItemConsolidator.exe dist/AUTO_Than_Long_v4.9_TEST_FILTER_V3.exe -Force
+          Copy-Item build/Release/ThanLongItemConsolidator.exe dist/AUTO_Than_Long_v4.9_TEST_FILTER_V4.exe -Force
           Copy-Item build/Release/ThanLongCleanRouteBridge.dll dist/ThanLongCleanRouteBridge.dll -Force
-          Compress-Archive -Path dist/AUTO_Than_Long_v4.9_TEST_FILTER_V3.exe,dist/ThanLongCleanRouteBridge.dll -DestinationPath dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-win-x64.zip -CompressionLevel Optimal -Force
+          Compress-Archive -Path dist/AUTO_Than_Long_v4.9_TEST_FILTER_V4.exe,dist/ThanLongCleanRouteBridge.dll -DestinationPath dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-win-x64.zip -CompressionLevel Optimal -Force
           $sourceItems=@('CMakeLists.txt','README.md','CHANGELOG.md','VERSION.txt','src','resources','test_scan','tools','.github')
-          Compress-Archive -Path $sourceItems -DestinationPath dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-source.zip -CompressionLevel Optimal -Force
-          $items=@('dist/AUTO_Than_Long_v4.9_TEST_FILTER_V3.exe','dist/ThanLongCleanRouteBridge.dll','dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-win-x64.zip','dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-source.zip')
+          Compress-Archive -Path $sourceItems -DestinationPath dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-source.zip -CompressionLevel Optimal -Force
+          $items=@('dist/AUTO_Than_Long_v4.9_TEST_FILTER_V4.exe','dist/ThanLongCleanRouteBridge.dll','dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-win-x64.zip','dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-source.zip')
           $lines=foreach($p in $items){$h=(Get-FileHash $p -Algorithm SHA256).Hash.ToLower();"$h  $([IO.Path]::GetFileName($p))"}
-          $lines | Set-Content dist/SHA256SUMS_TEST_FILTER_V3.txt
-          Get-Content dist/SHA256SUMS_TEST_FILTER_V3.txt
+          $lines | Set-Content dist/SHA256SUMS_TEST_FILTER_V4.txt
+          Get-Content dist/SHA256SUMS_TEST_FILTER_V4.txt
 
-      - name: Upload TEST FILTER v3 artifact
+      - name: Upload TEST FILTER v4 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AUTO-Than-Long-v4.9-TEST-FILTER-V3
+          name: AUTO-Than-Long-v4.9-TEST-FILTER-V4
           path: |
-            dist/AUTO_Than_Long_v4.9_TEST_FILTER_V3.exe
+            dist/AUTO_Than_Long_v4.9_TEST_FILTER_V4.exe
             dist/ThanLongCleanRouteBridge.dll
-            dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-win-x64.zip
-            dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-source.zip
-            dist/SHA256SUMS_TEST_FILTER_V3.txt
+            dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-win-x64.zip
+            dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-source.zip
+            dist/SHA256SUMS_TEST_FILTER_V4.txt
           if-no-files-found: error
 
-      - name: Publish FILTER v3 source and binaries to main
+      - name: Publish FILTER v4 source and binaries to main
         shell: powershell
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           Remove-Item build -Recurse -Force -ErrorAction SilentlyContinue
           git add CMakeLists.txt src test_scan
-          git add -f dist/AUTO_Than_Long_v4.9_TEST_FILTER_V3.exe
+          git add -f dist/AUTO_Than_Long_v4.9_TEST_FILTER_V4.exe
           git add -f dist/ThanLongCleanRouteBridge.dll
-          git add -f dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-win-x64.zip
-          git add -f dist/AUTO-Than-Long-v4.9-TEST-FILTER-V3-source.zip
-          git add -f dist/SHA256SUMS_TEST_FILTER_V3.txt
+          git add -f dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-win-x64.zip
+          git add -f dist/AUTO-Than-Long-v4.9-TEST-FILTER-V4-source.zip
+          git add -f dist/SHA256SUMS_TEST_FILTER_V4.txt
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
-            git commit -m "feat: add TEST FILTER v3 20-slot image logic + x64 artifacts [skip ci]"
+            git commit -m "feat: add optimized TEST FILTER v4 + x64 artifacts [skip ci]"
             git push origin HEAD:main
           }
