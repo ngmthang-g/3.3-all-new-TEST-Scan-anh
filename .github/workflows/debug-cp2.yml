@@ -15,7 +15,7 @@ jobs:
       - name: Run CP2 contract and capture output
         shell: powershell
         run: |
-          python tools/test_v4_precheck_contract.py *> cp2-contract.log
+          cmd /c "python tools\test_v4_precheck_contract.py > cp2-contract.log 2>&1"
           $code=$LASTEXITCODE
           "exit_code=$code" | Add-Content cp2-contract.log
           Set-Content cp2-exit.txt $code
