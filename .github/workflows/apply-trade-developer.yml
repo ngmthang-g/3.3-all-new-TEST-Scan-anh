@@ -25,6 +25,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'patch failed' }
           python tools/test_trade_callback_developer_contract.py
           if ($LASTEXITCODE -ne 0) { throw 'contract failed after patch' }
+          git config core.whitespace cr-at-eol
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw 'git diff check failed' }
 
