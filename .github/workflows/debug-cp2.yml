@@ -12,24 +12,24 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run CP2 contract and capture output
+      - name: Generate scanner sources through CP1
         shell: powershell
         run: |
-          cmd /c "python tools\test_v4_precheck_contract.py > cp2-contract.log 2>&1"
-          $code=$LASTEXITCODE
-          "exit_code=$code" | Add-Content cp2-contract.log
-          Set-Content cp2-exit.txt $code
-          exit 0
-      - name: Upload CP2 log
+          New-Item -ItemType Directory -Force generated | Out-Null
+          python tools/generate_image_scan_v4_sources.py --source-root . --output-dir generated
+          if ($LASTEXITCODE -ne 0) { throw 'generator failed' }
+          python tools/apply_pre_close_x_patch.py --source-root . --output-dir generated
+          if ($LASTEXITCODE -ne 0) { throw 'pre-close patch failed' }
+          foreach($patch in @('apply_ui30_controller_base.py','apply_ui30_controller_groups.py','apply_ui30_controller_runtime.py','apply_ui30_scanner.py','apply_v99_automation_cp1.py')){
+            python (Join-Path tools $patch) --source-root . --output-dir generated
+            if ($LASTEXITCODE -ne 0) { throw "$patch failed" }
+          }
+      - name: Upload generated CP1 sources
         uses: actions/upload-artifact@v4
         with:
-          name: cp2-contract-log
+          name: cp2-generated-inputs
           path: |
-            cp2-contract.log
-            cp2-exit.txt
+            generated/image_scan_test.cpp
+            generated/image_scan_auto_ext.inl
+            generated/controller.cpp
           if-no-files-found: error
-      - name: Fail if contract failed
-        shell: powershell
-        run: |
-          $code=[int](Get-Content cp2-exit.txt)
-          if($code -ne 0){throw "CP2 contract failed with exit code $code"}
