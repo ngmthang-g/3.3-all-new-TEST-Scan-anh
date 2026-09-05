@@ -112,6 +112,13 @@ execute_process(
 if(NOT TL_AUTOMATION_CP7_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "V9.9 automation CP7 Scan V4 AUTO-tab integration failed")
 endif()
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/apply_v99_automation_cp8.py"
+            --source-root "${CMAKE_SOURCE_DIR}" --output-dir "${TL_IMAGE_SCAN_GEN_DIR}"
+    RESULT_VARIABLE TL_AUTOMATION_CP8_PATCH_RESULT)
+if(NOT TL_AUTOMATION_CP8_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "V9.9 automation CP8 atomic trade + clear log integration failed")
+endif()
 
 add_library(ThanLongCleanRouteBridge SHARED "${TL_IMAGE_SCAN_GEN_DIR}/bridge.cpp")
 target_include_directories(ThanLongCleanRouteBridge PRIVATE "${TL_IMAGE_SCAN_GEN_DIR}" src)
