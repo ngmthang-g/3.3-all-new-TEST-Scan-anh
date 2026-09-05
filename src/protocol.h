@@ -9,7 +9,7 @@ constexpr std::uint32_t kMagic = 0x4352544Cu; // CRTL
 // v3.2 keeps the proven v3.1 action gate and makes the command proof less
 // recognizable to static scanners by deriving proof constants at runtime from
 // split volatile parts. Controller + Bridge are always shipped together.
-constexpr std::uint32_t kProtocolVersion = 0x00030200u;
+constexpr std::uint32_t kProtocolVersion = 0x00030300u;
 constexpr UINT kWakeMessage = WM_APP + 0x531;
 constexpr wchar_t kMappingPrefix[] = L"Local\\ThanLongCleanRoute_";
 
@@ -39,6 +39,7 @@ enum class Command : std::uint32_t {
     SelectTargetByRoleID = 22,
     ClickTravelSemantic = 23,
     ConfirmTravelSemantic = 24,
+    TestOpenBag = 25,
 };
 
 enum class TravelSemantic : std::int32_t {

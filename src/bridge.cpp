@@ -2048,6 +2048,113 @@ bool FindUiByName(const char* uiName, Il2CppObject*& ui, wchar_t* detail, std::s
     return false;
 }
 
+// TEST-ONLY OPEN BAG ---------------------------------------------------------
+// Isolated probe requested for runtime validation. It never uses InputSync,
+// coordinates, native button callbacks, sell/trade state, or any fallback click.
+// Remove this block + Command::TestOpenBag + controller test button after approval.
+bool GuiCallReferenceParam(const MethodInfo* method, std::uint32_t index) {
+    if (!method || index >= g_api.method_get_param_count(method)) return false;
+    const Il2CppType* type = g_api.method_get_param(method, index);
+    Il2CppClass* klass = type ? g_api.class_from_type(type) : nullptr;
+    return klass && !g_api.class_is_valuetype(klass);
+}
+
+bool TrySemanticCallUi(const char* uiName, wchar_t* detail, std::size_t cap) {
+    if (!EnsureUiLua(true, detail, cap)) return false;
+    if (!uiName || !*uiName) { SetText(detail, cap, L"TEST BAG: tên UI rỗng"); return false; }
+
+    Il2CppString* managedName = g_api.string_new(uiName);
+    Il2CppObject* emptyArgs = g_api.array_new(g_ui.systemObject, 0);
+    if (!managedName || !emptyArgs) {
+        SetText(detail, cap, L"TEST BAG: không tạo được managed name/object[]");
+        return false;
+    }
+
+    const char* methods[] = {"MainCallUI", "CallUI"};
+    for (const char* methodName : methods) {
+        for (int argc = 1; argc <= 3; ++argc) {
+            const MethodInfo* method = FindMethod(g_ui.guiApi, methodName, argc);
+            if (!method || !StaticMethod(method) || !ParamType(method, 0, "System.String")) continue;
+
+            Il2CppObject* null1 = nullptr;
+            Il2CppObject* null2 = nullptr;
+            void* args[3] = {&managedName, nullptr, nullptr};
+            bool compatible = true;
+            if (argc >= 2) {
+                if (ParamType(method, 1, "System.Object[]")) args[1] = &emptyArgs;
+                else if (GuiCallReferenceParam(method, 1)) args[1] = &null1;
+                else compatible = false;
+            }
+            if (argc >= 3) {
+                if (ParamType(method, 2, "System.Object[]")) args[2] = &emptyArgs;
+                else if (GuiCallReferenceParam(method, 2)) args[2] = &null2;
+                else compatible = false;
+            }
+            if (!compatible) continue;
+
+            void* exc = nullptr;
+            (void)g_api.runtime_invoke(method, nullptr, args, &exc);
+            if (exc) continue;
+
+            SetText(detail, cap, L"TEST BAG semantic ");
+            Append(detail, cap, methodName[0] == 'M' ? L"MainCallUI" : L"CallUI");
+            Append(detail, cap, L" argc=");
+            AppendInt(detail, cap, argc);
+            Append(detail, cap, L" • ");
+            wchar_t wideName[96]{};
+            MultiByteToWideChar(CP_UTF8, 0, uiName, -1, wideName, static_cast<int>(_countof(wideName)));
+            Append(detail, cap, wideName);
+            return true;
+        }
+    }
+
+    SetText(detail, cap, L"TEST BAG: không có overload MainCallUI/CallUI tương thích");
+    return false;
+}
+
+bool TestOpenBagSemantic(bool verifyOnly, Response& response,
+                         wchar_t* detail, std::size_t cap) {
+    if (!EnsureUiLua(true, detail, cap)) return false;
+
+    Il2CppObject* bagUi = nullptr;
+    wchar_t findDetail[192]{};
+    if (FindUiByName("RoleInfo_BagTab", bagUi, findDetail, _countof(findDetail)) && bagUi) {
+        response.resultCode = static_cast<std::int32_t>(ActionResult::StageReady);
+        response.value0 = 1;
+        SetText(detail, cap, L"TEST BAG VERIFY PASS • RoleInfo_BagTab đang tồn tại");
+        return true;
+    }
+    if (verifyOnly) {
+        SetText(detail, cap, L"TEST BAG VERIFY FAIL • chưa thấy RoleInfo_BagTab");
+        return false;
+    }
+
+    Classes c{};
+    if (!ResolveClasses(c, detail, cap) || !SafeForAction(c, detail, cap)) return false;
+
+    wchar_t parentDetail[192]{};
+    wchar_t bagDetail[192]{};
+    const bool parentCalled = TrySemanticCallUi("RoleInfo", parentDetail, _countof(parentDetail));
+    const bool bagCalled = TrySemanticCallUi("RoleInfo_BagTab", bagDetail, _countof(bagDetail));
+    response.value0 = parentCalled ? 1 : 0;
+    response.value1 = bagCalled ? 1 : 0;
+    if (!bagCalled) {
+        SetText(detail, cap, L"TEST BAG OPEN FAIL • parent=");
+        Append(detail, cap, parentCalled ? L"PASS" : L"FAIL");
+        Append(detail, cap, L" • ");
+        Append(detail, cap, bagDetail);
+        return false;
+    }
+
+    response.resultCode = static_cast<std::int32_t>(ActionResult::ActionInvoked);
+    SetText(detail, cap, L"TEST BAG OPEN DISPATCH PASS • parent=");
+    Append(detail, cap, parentCalled ? L"PASS" : L"FAIL");
+    Append(detail, cap, L" • ");
+    Append(detail, cap, bagDetail);
+    return true;
+}
+// END TEST-ONLY OPEN BAG -----------------------------------------------------
+
 bool InvokeLuaAction(const char* uiName, const char* functionName,
                      wchar_t* detail, std::size_t cap) {
     if (!EnsureUiLua(true, detail, cap)) return false;
@@ -2657,6 +2764,8 @@ void ProcessRequest() {
                 ok = ClickTravelSemantic(static_cast<TravelSemantic>(g_shared->request.arg0), r, detail, _countof(detail)); break;
             case Command::ConfirmTravelSemantic:
                 ok = ConfirmTravelSemantic(r, detail, _countof(detail)); break;
+            case Command::TestOpenBag:
+                ok = TestOpenBagSemantic(g_shared->request.arg0 != 0, r, detail, _countof(detail)); break;
             case Command::ToggleRide:
                 ok = ToggleRide(g_shared->request.arg0 != 0, detail, _countof(detail)); break;
             case Command::StartPath:

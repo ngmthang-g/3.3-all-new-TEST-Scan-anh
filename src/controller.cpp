@@ -174,6 +174,7 @@ constexpr int IDC_EXPORT_MAP_CONFIG = 212;
 constexpr int IDC_IMPORT_MAP_CONFIG = 213;
 constexpr int IDC_ENABLE_SHORTCUT = 214;
 constexpr int IDC_SHORTCUT_SETTINGS = 215;
+constexpr int IDC_TEST_OPEN_BAG = 216; // TEST-ONLY semantic open bag probe
 // Shortcut settings secondary window. 630-699 is isolated from inventory/Telegram IDs.
 constexpr int IDC_SC_THEME = 630;
 constexpr int IDC_SC_KUNLUN_X = 631;
@@ -1956,6 +1957,7 @@ private:
         shortcutSettingsButton_ = Make(L"BUTTON", L"TÙY CHỈNH", BS_PUSHBUTTON, 596, 345, 124, 27, IDC_SHORTCUT_SETTINGS); addFont(shortcutSettingsButton_);
         enableFight_ = Make(L"BUTTON", L"AUTO → Đánh quái", BS_AUTOCHECKBOX, 730, 347, 145, 24, IDC_ENABLE_FIGHT); addFont(enableFight_);
         addFont(Make(L"STATIC", L"Không foreground/không chiếm chuột", 0, 878, 350, 145, 22, 0));
+        addFont(Make(L"BUTTON", L"TEST MỞ TAY NẢI • KHÔNG CLICK", BS_PUSHBUTTON, 18, 386, 290, 30, IDC_TEST_OPEN_BAG));
 
         // Dòng mô tả kỹ thuật InputSync/callback được ẩn khỏi giao diện khách hàng.
         addFont(Make(L"BUTTON", L"LẤY 3 CLICK CỦA ACC...", BS_PUSHBUTTON, 755, 526, 268, 27, IDC_COPY_CLICKS));
@@ -7532,6 +7534,38 @@ private:
         return true;
     }
 
+    // TEST-ONLY: isolated from Auto/Trade/Sell/route state machines.
+    void TestOpenBag() {
+        Account* a = SelectedAccount();
+        if (!a) { Log(L"TEST TAY NẢI: chưa chọn acc"); return; }
+        std::wstring attachError;
+        if (!EnsureAttach(*a, attachError)) {
+            LogAccount(*a, L"TEST TAY NẢI: không attach được Bridge • " + attachError);
+            return;
+        }
+
+        Response openResponse{};
+        std::wstring openError;
+        if (!a->bridge.Call(Command::TestOpenBag, 0, 0, 0,
+                            openResponse, openError, 2200)) {
+            LogAccount(*a, L"TEST TAY NẢI OPEN FAIL • " + openError);
+            return;
+        }
+        LogAccount(*a, L"TEST TAY NẢI OPEN • " + std::wstring(openResponse.detail));
+
+        // MainCallUI may materialize the Lua panel on the following UI frame.
+        // This short wait is only for the manual TEST button and never enters Auto logic.
+        Sleep(350);
+        Response verifyResponse{};
+        std::wstring verifyError;
+        if (a->bridge.Call(Command::TestOpenBag, 1, 0, 0,
+                           verifyResponse, verifyError, 1200)) {
+            LogAccount(*a, L"TEST TAY NẢI VERIFY PASS • " + std::wstring(verifyResponse.detail));
+        } else {
+            LogAccount(*a, L"TEST TAY NẢI VERIFY FAIL • " + verifyError);
+        }
+    }
+
     void TestClick(ClickSlot slot) {
         Account* a = SelectedAccount();
         if (!a) { Log(L"TEST: chưa chọn acc"); return; }
@@ -9778,6 +9812,9 @@ private:
                         break;
                     case IDC_CAPTURE_STOP_AUTO_2:
                         BeginCapture(ClickSlot::StopAuto2);
+                        break;
+                    case IDC_TEST_OPEN_BAG:
+                        TestOpenBag();
                         break;
                     case IDC_TEST_AUTO:
                         TestClick(ClickSlot::AutoMenu);
