@@ -26,9 +26,12 @@ need('LicenseActionGateOpen()' in launcher and 'ThanLongLicenseActionAllowed' in
 need('ThanLongLicenseSessionToken' in launcher and 'RandomSessionToken' in launcher, "runtime session token missing")
 need('gLicenseActionGate.store(false' in launcher and 'gLicenseActionGate.store(true' in launcher, "gate state transitions missing")
 
-# Defense v3 introduced protocol 3.1; v4 legitimately advances it to 3.2 while
-# preserving the same protected-command proof fields and bridge enforcement.
-need(('kProtocolVersion = 0x00030100u' in protocol) or ('kProtocolVersion = 0x00030200u' in protocol),
+# Defense v3 introduced protocol 3.1; later compatible command additions advance
+# the protocol version while preserving the same protected-command proof fields
+# and bridge enforcement. 3.3 is the existing TestOpenBag baseline on main.
+need(('kProtocolVersion = 0x00030100u' in protocol) or
+     ('kProtocolVersion = 0x00030200u' in protocol) or
+     ('kProtocolVersion = 0x00030300u' in protocol),
      "controller/bridge protocol is older than defense v3")
 for token in ['IsLicenseProtectedCommand', 'LicenseRequestProof', 'licenseGate', 'licenseSessionToken', 'requestLicenseProof']:
     need(token in protocol, f"protocol license proof field missing: {token}")

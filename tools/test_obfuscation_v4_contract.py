@@ -57,8 +57,11 @@ need('LicenseGateLinear' in launcher and 'LicenseGateStateMachine' in launcher,
 need('return linear && stateMachine;' in launcher,
      'action gate does not require both independent paths')
 
-need('kProtocolVersion = 0x00030200u' in protocol,
-     'protocol not bumped to v3.2')
+# v4 introduced protocol 3.2. The current main baseline already advanced to 3.3
+# for the isolated TestOpenBag command without changing the v4 proof contract.
+need(('kProtocolVersion = 0x00030200u' in protocol) or
+     ('kProtocolVersion = 0x00030300u' in protocol),
+     'protocol older than v3.2')
 need('LicenseProofPepper()' in protocol and 'volatile std::uint64_t p0' in protocol,
      'proof pepper is still one obvious static constant')
 need('LicenseProofMulA()' in protocol and 'LicenseProofMulB()' in protocol,
