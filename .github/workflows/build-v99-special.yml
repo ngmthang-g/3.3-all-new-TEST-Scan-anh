@@ -50,6 +50,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'obfuscation v4 contract verifier failed' }
           python tools/test_image_scan_v5_contract.py
           if ($LASTEXITCODE -ne 0) { throw 'image scan v5 contract verifier failed' }
+          python tools/test_v4_precheck_contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'V4 precheck tay nai contract verifier failed' }
 
       - name: Configure x64 Release
         shell: powershell
