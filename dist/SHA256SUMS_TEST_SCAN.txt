@@ -1,4 +1,0 @@
-c5e227150b84fcc7b2f82ff80838102a0e3e7812f52c62151b5015f82b6c923f  AUTO_Than_Long_da_tinh_nang_Pro_v4.9_TEST_SCAN.exe
-1acdf8130b1e9bce08061ae36e86fa44e1fbe21a5d4dca2adafa0f2e82c5ec51  ThanLongCleanRouteBridge.dll
-4f7d36006b816b91a20caa1aab2b87399786e2a9561e1edc79771d251014b644  AUTO-Than-Long-v4.9-TEST-SCAN-win-x64.zip
-b86c33040ee9dad0111fa53fb15ad085f18c0d751451604f272e0e9445a5dca0  AUTO-Than-Long-v4.9-TEST-SCAN-v2-source.zip

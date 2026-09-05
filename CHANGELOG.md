@@ -1,112 +1,24 @@
-## v4.9 — Unified AUTO core + simplified dungeon scheduler
-
-- AUTO PHÓ BẢN không còn dùng DungeonAllStable như một engine trạng thái thứ hai; client/state/Đầu Thai/AutoPath/AutoFight tiếp tục do Account CORE AUTO quản lý.
-- Team dùng RoleID làm identity bền vững; PID chỉ là cache runtime và được refresh không phá STEP.
-- PRECHECK/GATHER/WAIT ENTER/WAIT EXIT/STEP thiếu state tạm thời đều WAIT thay vì tự STOP do rào riêng của Dungeon.
-- FIGHT-CLEAR scan toàn bộ GMonster VERIFIED mà scanner trả về; bỏ Name/ResID/Group/Radius/X,Y khỏi quyết định PASS. GMonster X,Y=? nhưng HP còn vẫn chặn STEP.
-- Scan fail, HP chưa chắc chắn hoặc scanner truncated đều WAIT; chỉ scan thành công và mọi GMonster VERIFIED sống = 0 mới PASS.
-- ReadDungeonProgress/TASK không còn chạy trong hot FIGHT loop; bảng TASK/Monster chỉ là chẩn đoán thủ công.
-- Giữ nguyên toàn bộ route/STEP/Parallel/Queue đã duyệt từ v4.7-v4.8.
-
-## v4.8 — Stable core restoration + approved v4.7 routes
-
-- Phó Bản dùng cùng ReadState freeze/recovery với Tab AUTO; một nhịp bridge lỗi không còn xóa KEY/PID.
-- Rebind theo RoleID giữ nguyên Slot 1..6 và PID cũ khi state tạm thời chưa đọc được; RUN/STEP chuyển WAIT thay vì STOP.
-- Sửa Life Guard: dungeonOwned được Đầu Thai bằng cùng Priority Revive core dù runtime.running=false.
-- AutoPath của Phó Bản giữ nguyên thú cưỡi tại đích; không phát Dismount cho dungeon-owned account.
-- Sửa STEP selection: STOP giữ lựa chọn người dùng để BẮT ĐẦU TỪ STEP ĐÃ CHỌN hoạt động.
-- Khôi phục Activity LIVE reader/controller behavior và TickDungeonFight từ v4.6 ổn định; giữ nguyên route/Parallel v4.7.
-- Giữ toàn bộ STEP đã duyệt: Hoàng Kim 9394, Huyền Phật 5881,2901, Trúc Lâm MOVE-only, Dã Ngoại final clear, Dung Nham 27 điểm.
-
-# v4.7 — approved DOCX dungeon routes and runtime barriers
-
-- Hoàng Kim Chi Liên: approved `9394,3009`; multi-waypoint parallel lanes for Slot 1-2 vs 3-6.
-- Huyền Phật Châu: approved `5881,2901`.
-- Trúc Lâm: `3279,2774` is MOVE ONLY.
-- Dã Ngoại Trại Phỉ: ALL -> `2039,2099` -> AutoFight -> verified GMonster area-clear.
-- Dung Nham Chi Địa: full 27-point move/clear route.
-- Ác Tặc Tạo Phản: STEP coordinates are present as a non-startable placeholder; NPC/entry/map remain intentionally blank.
-- WAIT ENTER / WAIT EXIT no longer auto-STOP on time alone.
-- Dungeon death is a local revive/resume pause and does not consume STEP timeout.
-- Activity board filters Unity property rows and keeps the last good LIVE counters as CACHED.
-- Telegram per-run completion names the actual next run/dungeon.
-- Parallel Group now supports sequential waypoints inside each participant lane.
-
-## v4.6 — Parallel Stage + START từ STEP + Activity/Monster UX
-
-- Sửa Activity Board: không còn tách mất dấu `/` trong tỷ lệ `current/target`; parser chấp nhận dòng mục tiêu có chữ dù client không hiện đúng một nhóm động từ hardcode.
-- Slot tổ đội được chuẩn hóa bền vững: **Slot 1 luôn là KEY**; khi tạo/sửa/nạp đội, RoleID/PID của KEY được đưa lên đầu. UI ghi rõ tick = thêm, bỏ tick = xóa và hiển thị Slot 2–6.
-- Thêm **BẮT ĐẦU TỪ STEP ĐÃ CHỌN**. Nếu toàn đội đã ở đúng DungeonMap thì chạy trực tiếp; nếu chưa ở trong PB vẫn đi qua entry pipeline rồi giữ đúng STEP đã chọn. Chọn giữa một Parallel Group tự chuẩn hóa về đầu group.
-- Thêm `Parallel Group`: các STEP TỌA ĐỘ liên tiếp cùng P# được dispatch đồng thời cho các mask slot không chồng nhau. Thêm `AutoFight khi đến tọa` để mỗi lane có thể tự bật đánh khi đến đích.
-- Điền lại canonical **Biên Giới Tống Liêu** theo kế hoạch đã duyệt: hội quân 1765,2665; tách 1–2 / 3–6 song song qua hai cặp điểm; hội quân 2213,1665 đánh sạch; tách 1279,1627 / 2503,1425 bật AutoFight; sau 10 giây hội quân 2071,1746 đánh sạch rồi chờ game đưa ra map.
-- FIGHT cho phép để trống Monster/ResID; completion vẫn fail-closed theo verified GMonster presence trong radius.
-- Thêm cửa sổ **MONSTER ĐÃ LƯU** hiển thị Name/ResID và cho xóa từng dòng; catalog vẫn dùng chung với combobox editor.
-- Editor STEP có `Parallel Group (0=tuần tự)` và `Bật AutoFight khi đến tọa`; INI export/import/preset override lưu đầy đủ hai trường mới.
-- Protocol EXE↔Bridge `0x00040600`; product/EXE/source/dist đồng bộ v4.6.
-
-## v4.5 — Multi-phó-bản queue + live Activity board
-
-- Mỗi tổ đội có tên hiển thị, sửa thành viên/KEY và danh sách nhiều phó bản; mỗi dòng chạy 1–10 lượt.
-- Queue chạy tuần tự: chứng minh rời dungeon map → Telegram từng lượt → dùng chung Auto Sell → lượt/phó bản tiếp theo.
-- AUTO-ĐÁNH/DỪNG/WAIT có thể kế thừa tọa độ hợp lệ gần nhất phía trên cùng Map; START fail-closed nếu kế thừa không hợp lệ.
-- BẢNG HOẠT ĐỘNG PB đọc semantic text trực tiếp từ active client UI; không OCR và không dùng GMonster/STEP để bịa current/target.
-- Xuất/nhập toàn bộ cấu hình phó bản, RoleID bền vững; PID/HWND/snapshot/RUN state không được persist.
-- Các nút v4.5 có hàng riêng ở đáy tab; ghi chú an toàn được dời xuống, không chồng control.
-
-# v4.4 — 2026-08-30
-
-- Clean bỏ toàn bộ logic đếm kill cũ của AUTO PHÓ BẢN; giữ strict GMonster scanner.
-- FIGHT hoàn thành theo monster presence: AutoFight, scan 5 giây/lần, còn GMonster sống thì đánh tiếp, scan 0 GMonster sống thì sang STEP; scan fail/HP unknown không được PASS.
-- Tích hợp bảng Monster/HP/Name và catalog Monster lưu Name/ResID từ v0.6.2 vào UI v4.4.
-- Nâng `GetDoingTasks` parser và chẩn đoán TaskID/Name/Parameters.
-- Thêm bảng tiến trình realtime, highlight STEP và countdown timeout.
-- Nâng TEST TASK + QUÁI thành CHẨN ĐOÁN TASK + QUÁI.
-
 # Changelog
 
-## 4.3
+## 9.9 ĐẶC BIỆT
 
-- AUTO PHÓ BẢN nhận ownership khi vào tab: dừng AUTO + AUTO PK ngay, không để ba scheduler cạnh tranh cùng PID.
-- FIGHT/STOP-FIGHT tái dùng InputSync AUTO→ĐÁNH QUÁI và DỪNG/Travel Guard của AUTO, có authoritative AutoFight verify trước khi tiến step.
-- Thêm QUÉT CLIENT thật + RoleID→PID rebind; chỉ lỗi binding/client được tự phục hồi ERROR→STOP.
-- Giao diện tổ đội dạng cây: KEY dòng đầu nền xám, member mỗi người một dòng; row mapping dùng lParam/team-id tránh START/STOP nhầm đội.
-- Sửa boxed IEnumerator trong ReadDungeonProgress/GetDoingTasks và Parameters bằng ManagedThis.
-- Sửa ACC BÁO CÁO dùng đúng Telegram tab index 3, không còn chồng lên AUTO PHÓ BẢN.
+- Đổi tên sản phẩm thành **Auto dồn đồ thần Long phiên bản PRO MAX by Thắng Nguyễn S2**.
+- Tách admission tối đa 4 CON khỏi FIFO; vé chỉ được cấp khi CON tới đúng TỌA GD.
+- MAIN đứng im, bỏ toàn bộ route/mở NPC/đóng shop của seller cũ và chỉ click Bước 5.
+- Thêm SellPause giữ nguyên CON/vé/pass khi MAIN dưới 9 ô; không hủy giao dịch dở.
+- Ưu tiên kiểm tra sức chứa sau pass trước quy tắc delta: MAIN dưới 9 ô luôn giữ CON và bán; chỉ dùng delta 0–8 để kết thúc khi MAIN vẫn còn ít nhất 9 ô.
+- Chuyển điểm học số click bán sang FreeBagSpace ổn định sau từng pass giao dịch.
+- Loại Auto PK, logic xoay bãi và các test/source liên quan.
+- Tab AUTO và AUTO PHÓ BẢN chỉ hiện popup tính năng đã cắt bỏ.
+- Mở TELE / LOG và ghi báo cáo local kể cả khi Telegram tắt hoặc lỗi.
 
-## 4.2
+## 3.5
 
-- Thêm mạng lưới đường đi Xa Truyền theo graph/descriptor riêng `travel_network_logic.h`, không nhồi thêm chuỗi if route vào controller.
-- Mở rộng `TravelSemantic`: Nam Hải, Miêu Cương, Hoàng Long Phủ, Thạch Lâm, Đại Lý; Bridge exact-match semantic text, không phụ thuộc dòng thứ N.
-- Tái sử dụng duy nhất Xa Truyền Bình ID 387 và tọa hiện có trong `sellNpcPositions_`.
-- Lâu Lan M5 đi trực tiếp Nam Hải M85, Miêu Cương M64, Hoàng Long Phủ M49; các đích M60/M61/M63/M65/M66 đi tắt tới Thạch Lâm M60 rồi handoff AutoPath cũ.
-- Thêm Nam Hải M85 → Đại Lý M2 qua Xa Truyền Tín ID 522 tại 7236,1908.
-- Không hardcode ResID chưa xác minh của Xa Truyền Chỉ/Sảng/Quy; planner không sinh cạnh NPC chưa có bằng chứng.
-- Route planner xét CurrentMap: đang ở mạng M60/M61/M63/M65/M66 thì không vòng về Lâu Lan.
-- Nâng protocol lên `0x00040200`, thêm `travel_network_logic_tests`, CI chạy 15 logic tests.
-
-## 4.1
-
-- Thêm `ReadDungeonProgress` đọc read-only `Game.GetDoingTasks()` → `dbTaskData.TaskID/Parameters` để dùng bảng tiến độ server, không OCR.
-- FIGHT hợp nhất TASK + strict GMonster: TASK fresh/bound là authority; scanner là verifier/fallback; timeout không bao giờ tạo PASS.
-- Thêm TASK + MONSTER LEARN và persistence INI theo preset/step; bind chỉ khi `GMonster.ResID` giao với key `Task.Parameters`.
-- Thêm `dungeon_progress_logic` + test policy server-sync/conflict/fallback.
-- Protocol 4.1 (`0x00040100`). FuBen packet 200168–200174 chỉ được giữ như proof slot, chưa replay khi direction/response store chưa được chứng minh.
-
-## 4.0
-
-- Thêm tab AUTO PHÓ BẢN theo kiến trúc multi-account của Pro, không thay core AUTO/AUTO PK.
-- Mỗi bảng tổ đội 1–6 acc, leader riêng, preset riêng, số lượt 1–3; hỗ trợ nhiều đội chạy đồng thời trên các PID khác nhau.
-- Start/Pause/Resume/Stop độc lập từng đội; một PID bị khóa không cho tham gia hai đội RUN/PAUSE.
-- Entry barrier toàn đội trước khi leader ClickNPC/callback dialog exact; mỗi client tự chứng minh MapID/MapReady/Position/AutoPath.
-- Thêm 19 preset phó bản canonical từ DATA và danh sách route/kill/boss tương ứng.
-- Transplant strict GMonster scanner + DeathTracker lifecycle từ donor 0.6.2, không transplant bridge/protocol/FSM đơn acc cũ.
-- Thêm semantic `ClickDialogText` fail-closed và protocol v4.0.
-- Thêm `dungeon_logic_tests` và CI build/artifact v4.0.
-- Transplant/adapt nốt persistence/editor/diagnostics từ source donor `ThanLongItemConsolidator_Source_v0.6.2(3)`: editor step + GET tọa + participant mask 1–6, team RoleID persistence, daily counter và skip diagnostics.
-- Sửa FIGHT step dùng đúng X/Y của khu tương ứng; loại bỏ cơ chế thử nghiệm “3 scan rỗng = PASS”. AOI disappearance không còn là completion proof.
-- Post-run Auto Sell fail-closed khi thiếu RoleID/FreeBagSpace; STOP/FAIL đóng background sell trước khi nhả ownership.
-- Q3 Tô Châu gather fallback đồng bộ canonical ENTRY NPC thành `4500,8190`; portal có settle guard 1.8 giây để tránh race step kế tiếp.
-- Giữ nguyên các logic 3.3 ngoài phạm vi tích hợp phó bản.
+- Chuyển dòng trạng thái `ĐIỀU PHỐI` khỏi hàng tab xuống cuối cửa sổ; chế độ thu gọn cũng giữ trạng thái ở hàng cuối.
+- Mở thanh tab rộng 870 px, ép 5 tab proxy có cùng độ rộng và dùng chữ Segoe UI semibold lớn hơn để không còn nút cuộn/cắt chữ.
+- Nâng hardening bản Release MSVC: LTCG, CFG, CET compatibility, ASLR high-entropy, NX, tối ưu loại code/data thừa, gộp hàm trùng và build tái lập.
+- Nhúng cảnh báo bản quyền tiếng Anh dưới dạng `RCDATA` trong EXE và thêm metadata `LegalCopyright`.
+- Giữ nguyên license Supabase fail-closed; không đưa secret quản trị vào EXE.
 
 ## 3.3
 

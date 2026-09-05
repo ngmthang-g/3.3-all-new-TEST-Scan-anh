@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AUTO Thần Long Pro - Quản lý key</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="wrap">
+    <section id="loginCard" class="card narrow">
+      <h1>Quản lý key</h1>
+      <p class="muted">AUTO Thần Long đa tính năng Pro</p>
+      <input id="email" type="email" placeholder="Email admin" autocomplete="username">
+      <input id="password" type="password" placeholder="Mật khẩu" autocomplete="current-password">
+      <button id="loginBtn">ĐĂNG NHẬP</button>
+      <div id="loginStatus" class="status"></div>
+    </section>
+
+    <section id="adminApp" class="hidden">
+      <header class="topbar">
+        <div>
+          <h1>AUTO Thần Long Pro</h1>
+          <div class="muted">Quản lý license v3.4 • Supabase</div>
+        </div>
+        <button id="logoutBtn" class="secondary">Đăng xuất</button>
+      </header>
+
+      <section class="card createBox">
+        <select id="duration">
+          <option value="3">3 ngày</option>
+          <option value="15">15 ngày</option>
+          <option value="30">30 ngày</option>
+          <option value="60">60 ngày</option>
+          <option value="90">90 ngày</option>
+          <option value="365">365 ngày</option>
+        </select>
+        <input id="newNote" type="text" maxlength="240" placeholder="Ghi chú: tên ai / máy ai">
+        <button id="createBtn">TẠO KEY</button>
+      </section>
+
+      <div id="adminStatus" class="status"></div>
+
+      <section class="card tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th><th>Loại</th><th>Trạng thái</th><th>Máy</th><th>Kích hoạt</th>
+              <th>Hết hạn</th><th>Hôm nay</th><th>Lần cuối</th><th>Ghi chú</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="keyRows"></tbody>
+        </table>
+      </section>
+
+      <section id="usageCard" class="card hidden">
+        <div class="usageHead">
+          <strong id="usageTitle">Báo cáo sử dụng</strong>
+          <button id="closeUsageBtn" class="secondary">Đóng</button>
+        </div>
+        <div id="usageBody"></div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

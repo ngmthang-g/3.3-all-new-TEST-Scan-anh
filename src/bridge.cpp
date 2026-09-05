@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <cwctype>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,7 +14,6 @@
 #include "protocol.h"
 #include "unity_geometry_logic.h"
 
-#include <initializer_list>
 using namespace cleanroute;
 using background_ui_logic::Labels;
 using background_ui_logic::Role;
@@ -673,118 +671,6 @@ FieldInfo* FindField(Il2CppClass* klass, const char* name) {
     return nullptr;
 }
 
-
-bool DungeonClassChainHasExactName(Il2CppClass* klass, const char* expected) {
-    if (!klass || !expected || !*expected || !g_api.class_get_name || !g_api.class_get_parent) return false;
-    for (Il2CppClass* current = klass; current; current = g_api.class_get_parent(current))
-        if (Eq(g_api.class_get_name(current), expected)) return true;
-    return false;
-}
-
-void DungeonCopyAscii(const char* text, wchar_t* out, std::size_t cap) {
-    if (!out || cap == 0) return; std::size_t i = 0;
-    if (text) while (i + 1 < cap && text[i]) { out[i] = static_cast<unsigned char>(text[i]); ++i; }
-    out[i] = 0;
-}
-
-bool DungeonTryScalar(Il2CppClass* klass, void* instance, std::int32_t& out,
-                      std::initializer_list<const char*> names) {
-    wchar_t ignored[96]{};
-    for (const char* name : names) if (ScalarGetter(klass, name, instance, out, ignored, _countof(ignored))) return true;
-    return false;
-}
-
-bool DungeonTryIntField(Il2CppClass* klass, Il2CppObject* instance, std::int32_t& out,
-                        std::initializer_list<const char*> names) {
-    if (!klass || !instance) return false;
-    for (const char* name : names) {
-        FieldInfo* field = FindField(klass, name); if (!field) continue;
-        if (!FieldType(field, "System.Int32")) continue;
-        g_api.field_get_value(instance, field, &out); return true;
-    }
-    return false;
-}
-
-bool DungeonTryString(Il2CppClass* klass, void* instance, wchar_t* out, std::size_t cap,
-                      std::initializer_list<const char*> names) {
-    if (!klass || !instance || !out || cap == 0) return false;
-    for (const char* name : names) {
-        const MethodInfo* m = FindMethod(klass, name, 0); if (!m) continue;
-        Il2CppObject* value = nullptr; wchar_t ignored[96]{};
-        if (InvokeObject(m, instance, value, ignored, _countof(ignored)) && value &&
-            CopyString(reinterpret_cast<Il2CppString*>(value), out, cap)) return true;
-    }
-    return false;
-}
-
-bool DungeonMatchBytes(const std::uint8_t* address, const std::uint8_t* expected, std::size_t count) {
-    if (!address || !expected || count == 0) return false;
-    std::vector<std::uint8_t> actual(count); SIZE_T done = 0;
-    return ReadProcessMemory(GetCurrentProcess(), address, actual.data(), count, &done) && done == count &&
-           std::equal(actual.begin(), actual.end(), expected);
-}
-
-bool DungeonFrozenBuild(wchar_t* detail, std::size_t cap) {
-    if (!g_api.module) { SetText(detail, cap, L"GameAssembly chưa resolve"); return false; }
-    IMAGE_DOS_HEADER dos{}; if (!ReadLocal(g_api.module, 0, dos) || dos.e_magic != IMAGE_DOS_SIGNATURE) { SetText(detail, cap, L"DOS header client không hợp lệ"); return false; }
-    IMAGE_NT_HEADERS64 nt{}; if (!ReadLocal(g_api.module, static_cast<std::size_t>(dos.e_lfanew), nt) || nt.Signature != IMAGE_NT_SIGNATURE ||
-        nt.FileHeader.TimeDateStamp != 0x6A410C14u || nt.OptionalHeader.SizeOfImage != 0x03DCB000u) {
-        SetText(detail, cap, L"Client khác frozen build 0x6A410C14/0x03DCB000; scanner phó bản fail-closed"); return false;
-    }
-    auto* base = reinterpret_cast<const std::uint8_t*>(g_api.module);
-    const std::uint8_t managerSig[] = {0x48,0x83,0xEC,0x28,0x80,0x3D,0xF7,0x2D,0x17,0x03,0x00,0x75};
-    const std::uint8_t hpSig[] = {0x40,0x57,0x48,0x83,0xEC,0x20,0x80,0x3D,0x3F,0xD1,0x12,0x03};
-    const std::uint8_t maxHpSig[] = {0x40,0x57,0x48,0x83,0xEC,0x20,0x80,0x3D,0x71,0xBA,0x12,0x03};
-    const std::uint8_t nameSig[] = {0x40,0x57,0x48,0x83,0xEC,0x20,0x80,0x3D,0x38,0xB1,0x12,0x03};
-    if (!DungeonMatchBytes(base+0x655010u,managerSig,sizeof(managerSig)) || !DungeonMatchBytes(base+0x69B0B0u,hpSig,sizeof(hpSig)) ||
-        !DungeonMatchBytes(base+0x69C780u,maxHpSig,sizeof(maxHpSig)) || !DungeonMatchBytes(base+0x69D080u,nameSig,sizeof(nameSig))) {
-        SetText(detail, cap, L"Chữ ký ObjectManager/GRole không khớp; scanner phó bản bị chặn"); return false;
-    }
-    return true;
-}
-
-bool ScanNearbyMonsters(Response& response, wchar_t* detail, std::size_t cap) {
-    Classes classes{};
-    if (!g_api.LoadUiDiscovery(detail, cap) || !ResolveClasses(classes, detail, cap) || !SafeForAction(classes, detail, cap) ||
-        !g_api.class_get_name || !DungeonFrozenBuild(detail, cap)) return false;
-    constexpr std::uintptr_t kManagerRva=0x655010u,kHpRva=0x69B0B0u,kMaxHpRva=0x69C780u,kNameRva=0x69D080u;
-    using GetManagerFn=Il2CppObject* (__fastcall*)(const MethodInfo*); using IntGetterFn=std::int32_t (__fastcall*)(Il2CppObject*,const MethodInfo*); using NameGetterFn=Il2CppString* (__fastcall*)(Il2CppObject*,const MethodInfo*);
-    auto* base=reinterpret_cast<std::uint8_t*>(g_api.module); auto getManager=reinterpret_cast<GetManagerFn>(base+kManagerRva);
-    auto getHP=reinterpret_cast<IntGetterFn>(base+kHpRva); auto getMaxHP=reinterpret_cast<IntGetterFn>(base+kMaxHpRva); auto getName=reinterpret_cast<NameGetterFn>(base+kNameRva);
-    Il2CppObject* manager=nullptr;
-#if defined(_MSC_VER)
-    __try { manager=getManager(nullptr); } __except(EXCEPTION_EXECUTE_HANDLER) { manager=nullptr; }
-#else
-    manager=getManager(nullptr);
-#endif
-    void* dictionary=nullptr; void* entries=nullptr; std::int32_t count=0;
-    if(!manager || !ReadLocal(manager,0x20,dictionary)||!dictionary || !ReadLocal(dictionary,0x18,entries)||!entries || !ReadLocal(dictionary,0x20,count)||count<0||count>4096){SetText(detail,cap,L"ObjectManager sprite dictionary chưa sẵn sàng/hợp lệ");return false;}
-    response.monsterCount=response.scannedEntries=response.excludedPlayerRoles=response.excludedOtherSprites=response.monsterHpReadFailures=0; response.monsterTruncated=0;
-    for(std::int32_t i=0;i<count;++i){
-        const std::size_t entry=0x20u+static_cast<std::size_t>(i)*0x18u; std::int32_t key=0,objRole=0; Il2CppObject* sprite=nullptr; ++response.scannedEntries;
-        if(!ReadLocal(entries,entry+0x08,key)||key<=0||!ReadLocal(entries,entry+0x10,sprite)||!sprite||!ReadLocal(sprite,0x30,objRole)||objRole!=key) continue;
-        Il2CppClass* actual=nullptr; if(!ReadLocal(sprite,0,actual)||!actual){++response.excludedOtherSprites;continue;}
-        const char* className=g_api.class_get_name(actual); if(!className){++response.excludedOtherSprites;continue;}
-        if(!DungeonClassChainHasExactName(actual,"GMonster")){if(DungeonClassChainHasExactName(actual,"GRole"))++response.excludedPlayerRoles;else ++response.excludedOtherSprites;continue;}
-        const bool gRole=DungeonClassChainHasExactName(actual,"GRole"); std::int32_t hp=-1,maxHP=-1; Il2CppString* managedName=nullptr; MonsterHpSource source=MonsterHpSource::None;
-        if(DungeonTryScalar(actual,sprite,hp,{"get_HP","get_Hp","get_CurrentHP"}) && DungeonTryScalar(actual,sprite,maxHP,{"get_MaxHP","get_MaxHp","get_HPMax"})) source=MonsterHpSource::SemanticGetter;
-#if defined(_MSC_VER)
-        if(source==MonsterHpSource::None&&gRole){__try{hp=getHP(sprite,nullptr);maxHP=getMaxHP(sprite,nullptr);source=MonsterHpSource::GuardedGRoleSubclassRva;}__except(EXCEPTION_EXECUTE_HANDLER){hp=-1;maxHP=-1;source=MonsterHpSource::None;}}
-        if(gRole){__try{managedName=getName(sprite,nullptr);}__except(EXCEPTION_EXECUTE_HANDLER){managedName=nullptr;}}
-#else
-        if(source==MonsterHpSource::None&&gRole){hp=getHP(sprite,nullptr);maxHP=getMaxHP(sprite,nullptr);source=MonsterHpSource::GuardedGRoleSubclassRva;} if(gRole) managedName=getName(sprite,nullptr);
-#endif
-        const bool vitals=source!=MonsterHpSource::None&&maxHP>0&&hp>=0&&hp<=maxHP; if(!vitals)++response.monsterHpReadFailures;
-        if(response.monsterCount>=kMaxMonsterRecords){response.monsterTruncated=1;continue;} MonsterRecord& rec=response.monsters[response.monsterCount++]; rec={};rec.roleID=key;rec.hp=hp;rec.maxHP=maxHP;rec.hpSource=static_cast<int>(source);rec.validMask|=MonsterValidIdentity|MonsterValidClassProof;if(vitals)rec.validMask|=MonsterValidVitals|MonsterValidLiveVitals;DungeonCopyAscii(className,rec.className,_countof(rec.className));
-        if(managedName&&CopyString(managedName,rec.name,_countof(rec.name)))rec.validMask|=MonsterValidName;else if(DungeonTryString(actual,sprite,rec.name,_countof(rec.name),{"get_Name","get_RoleName"}))rec.validMask|=MonsterValidName;
-        std::int32_t v=0;if(DungeonTryScalar(actual,sprite,v,{"get_ResID","get_ResId","get_TemplateID","get_MonsterID","get_MonsterResID"})||DungeonTryIntField(actual,sprite,v,{"ResID","resID","m_ResID","monsterResID","MonsterID","monsterID","m_MonsterID"})){rec.resID=v;if(v>0)rec.validMask|=MonsterValidTemplate;}
-        v=0;if(DungeonTryScalar(actual,sprite,v,{"get_Type","get_SpriteType","get_RoleType"})||DungeonTryIntField(actual,sprite,v,{"Type","type","m_Type","ObjectType"})){rec.type=v;rec.validMask|=MonsterValidType;}
-        v=vitals&&hp==0?1:0;if(DungeonTryScalar(actual,sprite,v,{"get_IsDeath","get_IsDead"})){rec.dead=v?1:0;rec.validMask|=MonsterValidDeath;}else if(vitals){rec.dead=hp==0?1:0;rec.validMask|=MonsterValidDeath;}
-        std::int32_t x=0,y=0;bool gx=DungeonTryScalar(actual,sprite,x,{"get_PosX","get_X"})||DungeonTryIntField(actual,sprite,x,{"PosX","posX","m_PosX"});bool gy=DungeonTryScalar(actual,sprite,y,{"get_PosY","get_Y"})||DungeonTryIntField(actual,sprite,y,{"PosY","posY","m_PosY"});if(gx&&gy){rec.x=x;rec.y=y;rec.validMask|=MonsterValidPosition;}
-    }
-    SetText(detail,cap,L"SCAN STRICT GMonster=");AppendInt(detail,cap,static_cast<int>(response.monsterCount));Append(detail,cap,L" / entries=");AppendInt(detail,cap,static_cast<int>(response.scannedEntries));if(response.monsterTruncated)Append(detail,cap,L" • TRUNCATED 96");return true;
-}
-
 bool IsExecutorClass(Il2CppClass* klass) {
     return klass && ExactMethod(klass, "get_Instance", 0, true) &&
            ExactMethod(klass, "ExecuteScriptFunction", 3, false);
@@ -970,324 +856,6 @@ bool InvokeEnum32NameArgs(const MethodInfo* method, void* instance, void** args,
     return true;
 }
 
-
-
-bool DungeonReadIntMember(Il2CppObject* object, Il2CppClass* klass,
-                          std::initializer_list<const char*> names, std::int32_t& out) {
-    if (!object || !klass) return false;
-    wchar_t ignored[96]{};
-    for (const char* name : names) {
-        std::string getter = std::string("get_") + name;
-        std::int64_t value = 0;
-        if (ScalarGetter64(klass, getter.c_str(), object, value, ignored, _countof(ignored)) &&
-            value >= INT32_MIN && value <= INT32_MAX) {
-            out = static_cast<std::int32_t>(value);
-            return true;
-        }
-        if (ReadScalarField64(object, klass, name, value) && value >= INT32_MIN && value <= INT32_MAX) {
-            out = static_cast<std::int32_t>(value);
-            return true;
-        }
-    }
-    return false;
-}
-
-bool DungeonReadObjectMember(Il2CppObject* object, Il2CppClass* klass,
-                             std::initializer_list<const char*> names, Il2CppObject*& out) {
-    out = nullptr;
-    if (!object || !klass) return false;
-    wchar_t ignored[96]{};
-    for (const char* name : names) {
-        std::string getter = std::string("get_") + name;
-        if (const MethodInfo* method = FindMethod(klass, getter.c_str(), 0)) {
-            Il2CppObject* value = nullptr;
-            if (InvokeObject(method, object, value, ignored, _countof(ignored))) {
-                out = value;
-                return true;
-            }
-        }
-        if (FieldInfo* field = FindField(klass, name)) {
-            Il2CppObject* value = nullptr;
-            g_api.field_get_value(object, field, &value);
-            out = value;
-            return true;
-        }
-    }
-    return false;
-}
-
-bool DungeonEnsureMetadataIteration() {
-    if (!g_api.class_get_name) (void)Resolve(g_api.module, "il2cpp_class_get_name", g_api.class_get_name);
-    if (!g_api.class_get_methods) (void)Resolve(g_api.module, "il2cpp_class_get_methods", g_api.class_get_methods);
-    if (!g_api.method_get_name) (void)Resolve(g_api.module, "il2cpp_method_get_name", g_api.method_get_name);
-    return g_api.class_get_methods && g_api.method_get_name;
-}
-
-bool DungeonMethodNameMatches(const char* actual, const char* wanted) {
-    if (!actual || !wanted) return false;
-    if (Eq(actual, wanted)) return true;
-    const std::size_t actualLen = std::strlen(actual);
-    const std::size_t wantedLen = std::strlen(wanted);
-    if (actualLen <= wantedLen) return false;
-    const std::size_t offset = actualLen - wantedLen;
-    return actual[offset - 1] == '.' && std::strcmp(actual + offset, wanted) == 0;
-}
-
-const MethodInfo* DungeonFindMethodFlexible(Il2CppClass* klass, const char* name, int argc) {
-    if (!klass || !name) return nullptr;
-    if (const MethodInfo* direct = FindMethod(klass, name, argc)) return direct;
-    if (!DungeonEnsureMetadataIteration()) return nullptr;
-    for (Il2CppClass* c = klass; c; c = g_api.class_get_parent(c)) {
-        void* iterator = nullptr;
-        while (const MethodInfo* method = g_api.class_get_methods(c, &iterator)) {
-            const char* actual = g_api.method_get_name(method);
-            if (!DungeonMethodNameMatches(actual, name)) continue;
-            if (static_cast<int>(g_api.method_get_param_count(method)) == argc) return method;
-        }
-    }
-    return nullptr;
-}
-
-std::wstring DungeonClassLabel(Il2CppObject* object) {
-    if (!object) return L"null";
-    Il2CppClass* klass = g_api.object_get_class(object);
-    if (!klass) return L"class?";
-    (void)DungeonEnsureMetadataIteration();
-    const char* name = g_api.class_get_name ? g_api.class_get_name(klass) : nullptr;
-    if (!name) return L"class?";
-    std::wstring out;
-    while (*name) out.push_back(static_cast<unsigned char>(*name++));
-    return out;
-}
-
-bool DungeonLooksLikeTaskObject(Il2CppObject* object) {
-    if (!object) return false;
-    Il2CppClass* klass = g_api.object_get_class(object);
-    std::int32_t taskID = 0;
-    return klass && DungeonReadIntMember(object, klass, {"TaskID", "ID"}, taskID) && taskID > 0;
-}
-
-bool DungeonUnwrapTaskCurrent(Il2CppObject* current, Il2CppObject*& task) {
-    task = nullptr;
-    if (!current) return true;
-    if (DungeonLooksLikeTaskObject(current)) { task = current; return true; }
-    Il2CppClass* klass = g_api.object_get_class(current);
-    const MethodInfo* getValue = klass ? DungeonFindMethodFlexible(klass, "get_Value", 0) : nullptr;
-    if (!getValue) return false;
-    Il2CppObject* value = nullptr;
-    wchar_t ignored[96]{};
-    if (!InvokeObject(getValue, ManagedThis(current), value, ignored, _countof(ignored))) return false;
-    if (value && DungeonLooksLikeTaskObject(value)) task = value;
-    return task != nullptr;
-}
-
-bool DungeonEnumerateTaskSequence(Il2CppObject* sequence, std::vector<Il2CppObject*>& tasks,
-                                  wchar_t* detail, std::size_t cap) {
-    if (!sequence) return true;
-
-    // Only use the raw managed-array layout when metadata explicitly says this is an array.
-    // Applying array offsets to List/Dictionary objects would be unsafe.
-    const std::wstring sequenceClass = DungeonClassLabel(sequence);
-    if (sequenceClass.find(L"[]") != std::wstring::npos) {
-        std::vector<Il2CppObject*> arrayValues;
-        if (!ReadManagedPointerArray(sequence, arrayValues, 512)) {
-            SetText(detail, cap, L"TASK managed array layout không đọc được");
-            return false;
-        }
-        for (Il2CppObject* current : arrayValues) {
-            Il2CppObject* task = nullptr;
-            if (current && DungeonUnwrapTaskCurrent(current, task) && task) tasks.push_back(task);
-        }
-        return true;
-    }
-
-    Il2CppClass* cc = g_api.object_get_class(sequence);
-    if (!cc) { SetText(detail, cap, L"TASK collection không có class"); return false; }
-    const MethodInfo* getEnumerator = DungeonFindMethodFlexible(cc, "GetEnumerator", 0);
-    if (!getEnumerator) {
-        SetText(detail, cap, L"TASK collection thiếu GetEnumerator • class=");
-        const std::wstring label = DungeonClassLabel(sequence); Append(detail, cap, label.c_str());
-        return false;
-    }
-    Il2CppObject* enumerator = nullptr;
-    wchar_t invokeDetail[160]{};
-    if (!InvokeObject(getEnumerator, ManagedThis(sequence), enumerator, invokeDetail, _countof(invokeDetail)) || !enumerator) {
-        SetText(detail, cap, L"TASK GetEnumerator invoke fail • "); Append(detail, cap, invokeDetail);
-        return false;
-    }
-    Il2CppClass* ec = g_api.object_get_class(enumerator);
-    const MethodInfo* moveNext = ec ? DungeonFindMethodFlexible(ec, "MoveNext", 0) : nullptr;
-    const MethodInfo* getCurrent = ec ? DungeonFindMethodFlexible(ec, "get_Current", 0) : nullptr;
-    if (!moveNext || !getCurrent) {
-        SetText(detail, cap, L"TASK enumerator thiếu MoveNext/get_Current • class=");
-        const std::wstring label = DungeonClassLabel(enumerator); Append(detail, cap, label.c_str());
-        return false;
-    }
-    for (int guard = 0; guard < 512; ++guard) {
-        std::int64_t moved = 0;
-        if (!InvokeScalar(moveNext, ManagedThis(enumerator), moved, invokeDetail, _countof(invokeDetail))) {
-            SetText(detail, cap, L"TASK MoveNext fail • "); Append(detail, cap, invokeDetail); return false;
-        }
-        if (!moved) return true;
-        Il2CppObject* current = nullptr;
-        if (!InvokeObject(getCurrent, ManagedThis(enumerator), current, invokeDetail, _countof(invokeDetail))) {
-            SetText(detail, cap, L"TASK get_Current fail • "); Append(detail, cap, invokeDetail); return false;
-        }
-        Il2CppObject* task = nullptr;
-        if (current && DungeonUnwrapTaskCurrent(current, task) && task) tasks.push_back(task);
-        // Unknown entries are ignored instead of turning a heterogeneous container into a hard failure.
-    }
-    SetText(detail, cap, L"TASK enumerator vượt guard 512");
-    return false;
-}
-
-bool DungeonEnumerateTasks(Il2CppObject* collection, std::vector<Il2CppObject*>& tasks,
-                           wchar_t* detail, std::size_t cap) {
-    tasks.clear();
-    if (!collection) return true;
-    if (DungeonLooksLikeTaskObject(collection)) { tasks.push_back(collection); return true; }
-    Il2CppClass* cc = g_api.object_get_class(collection);
-    if (!cc) { SetText(detail, cap, L"GetDoingTasks collection class=null"); return false; }
-
-    // Dictionary<int, dbTaskData> is best read through Values, avoiding boxed KeyValuePair quirks.
-    if (const MethodInfo* getValues = DungeonFindMethodFlexible(cc, "get_Values", 0)) {
-        Il2CppObject* values = nullptr;
-        wchar_t ignored[160]{};
-        if (InvokeObject(getValues, ManagedThis(collection), values, ignored, _countof(ignored)) && values) {
-            if (DungeonEnumerateTaskSequence(values, tasks, detail, cap)) return true;
-            tasks.clear();
-        }
-    }
-
-    if (DungeonEnumerateTaskSequence(collection, tasks, detail, cap)) return true;
-
-    // Last safe fallback for List/IList-like containers: Count + zero-based Item(index).
-    const std::wstring classLabel = DungeonClassLabel(collection);
-    if (classLabel.find(L"List") != std::wstring::npos || classLabel.find(L"Collection") != std::wstring::npos) {
-        const MethodInfo* getCount = DungeonFindMethodFlexible(cc, "get_Count", 0);
-        const MethodInfo* getItem = DungeonFindMethodFlexible(cc, "get_Item", 1);
-        if (getCount && getItem) {
-            wchar_t ignored[160]{};
-            std::int64_t count = 0;
-            if (InvokeScalar(getCount, ManagedThis(collection), count, ignored, _countof(ignored)) && count >= 0 && count <= 512) {
-                tasks.clear();
-                for (std::int32_t i = 0; i < static_cast<std::int32_t>(count); ++i) {
-                    void* args[] = {&i};
-                    Il2CppObject* current = nullptr;
-                    if (!InvokeObjectArgs(getItem, ManagedThis(collection), args, current, ignored, _countof(ignored))) {
-                        SetText(detail, cap, L"TASK IList get_Item fail"); return false;
-                    }
-                    Il2CppObject* task = nullptr;
-                    if (current && DungeonUnwrapTaskCurrent(current, task) && task) tasks.push_back(task);
-                }
-                return true;
-            }
-        }
-    }
-    SetText(detail, cap, L"GetDoingTasks collection không đọc được • class=");
-    Append(detail, cap, classLabel.c_str());
-    return false;
-}
-
-bool DungeonReadTaskParameters(Il2CppObject* parameters, DungeonTaskRecord& record) {
-    if (!parameters) {
-        record.validMask |= DungeonTaskValidParameters;
-        return true;
-    }
-    Il2CppClass* pc = g_api.object_get_class(parameters);
-    const MethodInfo* getEnumerator = pc ? DungeonFindMethodFlexible(pc, "GetEnumerator", 0) : nullptr;
-    if (!getEnumerator) return false;
-    Il2CppObject* enumerator = nullptr;
-    wchar_t ignored[128]{};
-    if (!InvokeObject(getEnumerator, ManagedThis(parameters), enumerator, ignored, _countof(ignored)) || !enumerator) return false;
-    Il2CppClass* ec = g_api.object_get_class(enumerator);
-    const MethodInfo* moveNext = ec ? DungeonFindMethodFlexible(ec, "MoveNext", 0) : nullptr;
-    const MethodInfo* getCurrent = ec ? DungeonFindMethodFlexible(ec, "get_Current", 0) : nullptr;
-    if (!moveNext || !getCurrent) return false;
-
-    for (int guard = 0; guard < 1024; ++guard) {
-        std::int64_t moved = 0;
-        if (!InvokeScalar(moveNext, ManagedThis(enumerator), moved, ignored, _countof(ignored))) return false;
-        if (!moved) {
-            record.validMask |= DungeonTaskValidParameters;
-            return true;
-        }
-        Il2CppObject* current = nullptr;
-        if (!InvokeObject(getCurrent, ManagedThis(enumerator), current, ignored, _countof(ignored)) || !current) return false;
-        Il2CppClass* kc = g_api.object_get_class(current);
-        const MethodInfo* getKey = kc ? DungeonFindMethodFlexible(kc, "get_Key", 0) : nullptr;
-        const MethodInfo* getValue = kc ? DungeonFindMethodFlexible(kc, "get_Value", 0) : nullptr;
-        if (!getKey || !getValue) return false;
-        std::int64_t key64 = 0, value64 = 0;
-        if (!InvokeScalar(getKey, ManagedThis(current), key64, ignored, _countof(ignored)) ||
-            !InvokeScalar(getValue, ManagedThis(current), value64, ignored, _countof(ignored))) return false;
-        if (key64 < INT32_MIN || key64 > INT32_MAX || value64 < INT32_MIN || value64 > INT32_MAX) continue;
-        if (record.parameterCount < kMaxDungeonTaskParameters) {
-            DungeonTaskParameter& output = record.parameters[record.parameterCount++];
-            output.key = static_cast<std::int32_t>(key64);
-            output.value = static_cast<std::int32_t>(value64);
-        } else {
-            record.parameterTruncated = 1;
-        }
-    }
-    return false;
-}
-
-bool DungeonTaskName(const Classes& c, std::int32_t taskID, wchar_t* out, std::size_t cap) {
-    if (!out || cap == 0) return false;
-    out[0] = 0;
-    const MethodInfo* method = FindMethod(c.gameApi, "GetTaskName", 1);
-    if (!method || !StaticMethod(method)) return false;
-    void* args[] = {&taskID};
-    Il2CppObject* value = nullptr;
-    wchar_t ignored[96]{};
-    if (!InvokeObjectArgs(method, nullptr, args, value, ignored, _countof(ignored)) || !value) return false;
-    return CopyString(reinterpret_cast<Il2CppString*>(value), out, cap);
-}
-
-bool ReadDungeonProgress(Response& response, wchar_t* detail, std::size_t cap) {
-    response.dungeonProgress = DungeonProgressSnapshot{};
-    Classes c{};
-    if (!ResolveClasses(c, detail, cap)) return false;
-    const MethodInfo* getDoingTasks = FindMethod(c.gameApi, "GetDoingTasks", 0);
-    if (!getDoingTasks || !StaticMethod(getDoingTasks)) {
-        SetText(detail, cap, L"Không resolve LuaSystemAPI_Game.GetDoingTasks()");
-        return false;
-    }
-    Il2CppObject* collection = nullptr;
-    if (!InvokeObject(getDoingTasks, nullptr, collection, detail, cap)) return false;
-
-    std::vector<Il2CppObject*> tasks;
-    if (!DungeonEnumerateTasks(collection, tasks, detail, cap)) return false;
-
-    response.dungeonProgress.capturedTick = GetTickCount64();
-    response.dungeonProgress.validMask = 1u; // semantic task snapshot was read successfully.
-    for (Il2CppObject* task : tasks) {
-        if (!task) continue;
-        if (response.dungeonProgress.taskCount >= kMaxDungeonTasks) {
-            response.dungeonProgress.taskTruncated = 1;
-            break;
-        }
-        Il2CppClass* tc = g_api.object_get_class(task);
-        if (!tc) continue;
-        DungeonTaskRecord record{};
-        if (!DungeonReadIntMember(task, tc, {"TaskID", "ID"}, record.taskID) || record.taskID <= 0) continue;
-        record.validMask |= DungeonTaskValidIdentity;
-        if (DungeonTaskName(c, record.taskID, record.name, _countof(record.name)))
-            record.validMask |= DungeonTaskValidName;
-
-        Il2CppObject* parameters = nullptr;
-        if (DungeonReadObjectMember(task, tc, {"Parameters"}, parameters)) {
-            (void)DungeonReadTaskParameters(parameters, record);
-        }
-        response.dungeonProgress.tasks[response.dungeonProgress.taskCount++] = record;
-    }
-
-    SetText(detail, cap, L"TASK snapshot PASS • GetDoingTasks/Parameters • doing=");
-    AppendInt(detail, cap, static_cast<int>(response.dungeonProgress.taskCount));
-    return true;
-}
-
 const MethodInfo* BagListMethod(const Classes& c) {
     const MethodInfo* method = FindMethod(c.gameApi, "GetItemsAtSite", 1);
     if (method && StaticMethod(method)) return method;
@@ -1375,10 +943,10 @@ bool TryReadBagEnumerator(Il2CppObject* collection, Il2CppClass* cc, std::vector
     candidate.reserve(100);
     for (int guard = 0; guard < 1000; ++guard) {
         std::int64_t moved = 0;
-        if (!InvokeScalar(moveNext, ManagedThis(enumerator), moved, ignored, _countof(ignored))) return false;
+        if (!InvokeScalar(moveNext, enumerator, moved, ignored, _countof(ignored))) return false;
         if (!moved) { items.swap(candidate); return true; }
         Il2CppObject* current = nullptr;
-        if (!InvokeObject(getCurrent, ManagedThis(enumerator), current, ignored, _countof(ignored))) return false;
+        if (!InvokeObject(getCurrent, enumerator, current, ignored, _countof(ignored))) return false;
         Il2CppObject* item = nullptr;
         if (!TryUnwrapBagEnumeratorCurrent(current, item)) return false;
         if (item) candidate.push_back(item);
@@ -1966,7 +1534,8 @@ void CancelOwnedInputSyncDrag(Il2CppObject* manager) {
 }
 
 bool InvokeInternalPointClick(int normalizedX, int normalizedY,
-                              wchar_t* detail, std::size_t cap) {
+                          wchar_t* detail, std::size_t cap,
+                          bool rawMacro = false) {
     UnityVector2 point{};
     if (!BuildInputSyncScreenPoint(normalizedX, normalizedY, point, detail, cap)) return false;
 
@@ -1977,10 +1546,17 @@ bool InvokeInternalPointClick(int normalizedX, int normalizedY,
     }
 
     bool dragging = false;
-    if (!ReadInputSyncDragging(manager, dragging, detail, cap)) return false;
-    if (dragging) {
-        SetText(detail, cap, L"InputSyncManager đang giữ UI drag; không chồng click nội bộ");
-        return false;
+    if (!rawMacro) {
+        if (!ReadInputSyncDragging(manager, dragging, detail, cap)) return false;
+        if (dragging) {
+            SetText(detail, cap, L"InputSyncManager đang giữ UI drag; không chồng click nội bộ");
+            return false;
+        }
+    } else {
+        // Raw trade macro: stale drag evidence is cleanup-only, not a UI gate.
+        wchar_t ignored[128]{};
+        if (ReadInputSyncDragging(manager, dragging, ignored, _countof(ignored)) && dragging)
+            CancelOwnedInputSyncDrag(manager);
     }
 
     std::int32_t button = internal_ui_click_logic::kLeftButton;
@@ -1992,10 +1568,13 @@ bool InvokeInternalPointClick(int normalizedX, int normalizedY,
         SetText(detail, cap, L"InputSyncManager.TryClickUI ném exception");
         return false;
     }
-    if (!ReadInputSyncDragging(manager, dragging, detail, cap)) return false;
-    if (!dragging) {
-        SetText(detail, cap, L"InputSyncManager raycast không bắt được UI tại tọa độ đã gán");
-        return false;
+
+    if (!rawMacro) {
+        if (!ReadInputSyncDragging(manager, dragging, detail, cap)) return false;
+        if (!dragging) {
+            SetText(detail, cap, L"InputSyncManager raycast không bắt được UI tại tọa độ đã gán");
+            return false;
+        }
     }
 
     void* releaseArgs[] = {&point};
@@ -2004,33 +1583,33 @@ bool InvokeInternalPointClick(int normalizedX, int normalizedY,
         SetText(detail, cap, L"InputSyncManager.EndUIDrag ném exception; đã hủy drag nội bộ");
         return false;
     }
-    if (!ReadInputSyncDragging(manager, dragging, detail, cap)) return false;
-    if (dragging) {
-        CancelOwnedInputSyncDrag(manager);
-        SetText(detail, cap, L"InputSyncManager chưa nhả UI drag; đã hủy và dừng fail-closed");
-        return false;
+
+    if (!rawMacro) {
+        if (!ReadInputSyncDragging(manager, dragging, detail, cap)) return false;
+        if (dragging) {
+            CancelOwnedInputSyncDrag(manager);
+            SetText(detail, cap, L"InputSyncManager chưa nhả UI drag; đã hủy và dừng fail-closed");
+            return false;
+        }
+    } else {
+        // Best-effort cleanup only. Raycast/drag-state evidence never decides
+        // whether the user's saved trade macro advances to Delay/Repeat/next row.
+        wchar_t ignored[128]{};
+        if (ReadInputSyncDragging(manager, dragging, ignored, _countof(ignored)) && dragging)
+            CancelOwnedInputSyncDrag(manager);
     }
     return true;
 }
 
-bool ClickInternalPoint(int normalizedX, int normalizedY, Response& response,
+bool ClickInternalPoint(int normalizedX, int normalizedY, bool rawMacro, Response& response,
                         wchar_t* detail, std::size_t cap) {
     Classes c{};
     if (!ResolveClasses(c, detail, cap) || !SafeForAction(c, detail, cap)) return false;
-    if (!InvokeInternalPointClick(normalizedX, normalizedY, detail, cap)) return false;
+    if (!InvokeInternalPointClick(normalizedX, normalizedY, detail, cap, rawMacro)) return false;
     response.resultCode = static_cast<std::int32_t>(ActionResult::ActionInvoked);
-    SetText(detail, cap, L"InputSync click nội bộ hoàn chỉnh: TryClickUI → EndUIDrag");
-    return true;
-}
-
-bool ClickInternalPointRawTest(int normalizedX, int normalizedY, Response& response,
-                               wchar_t* detail, std::size_t cap) {
-    // TEST SCAN PoC only: deliberately bypass ResolveClasses/SafeForAction so the
-    // experiment measures image recognition -> InputSync click without AUTO state gates.
-    // InvokeInternalPointClick still enforces InputSync's own drag ownership contract.
-    if (!InvokeInternalPointClick(normalizedX, normalizedY, detail, cap)) return false;
-    response.resultCode = static_cast<std::int32_t>(ActionResult::ActionInvoked);
-    SetText(detail, cap, L"RAW TEST InputSync PASS: TryClickUI → EndUIDrag • không SafeForAction");
+    SetText(detail, cap, rawMacro
+        ? L"RAW MACRO InputSync: TryClickUI → EndUIDrag; không gate theo raycast/_uiDragging"
+        : L"InputSync click nội bộ hoàn chỉnh: TryClickUI → EndUIDrag");
     return true;
 }
 
@@ -2580,11 +2159,6 @@ bool IsExactSemanticToken(const std::wstring& raw, TravelSemantic semantic) {
         case TravelSemantic::KunLunSon: return key == L"conlonson";
         case TravelSemantic::TinhTucHai: return key == L"tinhtuc" || key == L"tinhtuchai";
         case TravelSemantic::DenCacMonPhai: return key == L"dencacmonphai";
-        case TravelSemantic::NamHai: return key == L"namhai";
-        case TravelSemantic::MieuCuong: return key == L"mieucuong";
-        case TravelSemantic::HoangLongPhu: return key == L"hoanglongphu";
-        case TravelSemantic::ThachLam: return key == L"thachlam";
-        case TravelSemantic::DaiLy: return key == L"daili";
         default: return false;
     }
 }
@@ -2680,22 +2254,6 @@ bool ClickTravelSemantic(TravelSemantic semantic, Response& response, wchar_t* d
     Append(detail, cap, L" T="); Append(detail, cap, selected.labels.text.c_str());
     Append(detail, cap, L" P="); Append(detail, cap, selected.labels.ancestors.c_str());
     return true;
-}
-
-
-bool DungeonExactToken(const std::wstring& raw, const wchar_t* expected) {
-    if (!expected || !*expected) return false;
-    return background_ui_logic::Key(raw) == background_ui_logic::Key(expected);
-}
-bool DungeonDescendantExact(const std::wstring& raw, const wchar_t* expected) {
-    std::size_t start=0; while(start<=raw.size()){const std::size_t slash=raw.find(L'/',start);const std::wstring token=raw.substr(start,slash==std::wstring::npos?std::wstring::npos:slash-start);if(DungeonExactToken(token,expected))return true;if(slash==std::wstring::npos)break;start=slash+1;}return false;
-}
-bool ClickDialogTextExact(const wchar_t* expected, Response& response, wchar_t* detail, std::size_t cap) {
-    if(!expected||!*expected){SetText(detail,cap,L"Dialog text rỗng; fail-closed");return false;} if(!EnsureUiDiscovery(detail,cap))return false;
-    std::vector<UiControl> objects;if(!EnumerateActiveUiObjects(objects,detail,cap))return false;std::vector<std::size_t> candidates,dialogCandidates;
-    for(std::size_t i=0;i<objects.size();++i){auto& row=objects[i];if(!row.object||!row.klass||!ExactMethod(row.klass,"HandleClickEvent",0,false))continue;const MethodInfo* ig=FindMethod(row.klass,"get_Interactable",0);if(ig){std::int32_t v=0;wchar_t d[64]{};if(ScalarGetter(row.klass,"get_Interactable",row.object,v,d,_countof(d))&&!v)continue;}const bool match=DungeonExactToken(row.labels.text,expected)||DungeonExactToken(row.labels.name,expected)||DungeonDescendantExact(row.labels.descendants,expected);if(!match)continue;candidates.push_back(i);const std::wstring ctx=background_ui_logic::Key(row.labels.ancestors+L"/"+row.labels.name);if(background_ui_logic::Has(ctx,{L"gamedialog",L"buttonlist",L"dialog",L"npc"}))dialogCandidates.push_back(i);}
-    if(!dialogCandidates.empty())candidates.swap(dialogCandidates);if(candidates.size()!=1){SetText(detail,cap,candidates.empty()?L"DIALOG EXACT NOT_FOUND • fail-closed":L"DIALOG EXACT AMBIGUOUS • fail-closed");Append(detail,cap,L" • candidates=");AppendInt(detail,cap,static_cast<int>(candidates.size()));return false;}
-    auto& selected=objects[candidates.front()];const MethodInfo* click=ExactMethod(selected.klass,"HandleClickEvent",0,false);if(!click||!InvokeVoid(click,ManagedThis(selected.object),nullptr,detail,cap))return false;response.resultCode=static_cast<int>(ActionResult::ActionInvoked);SetText(detail,cap,L"DIALOG EXACT CALLBACK PASS • ");Append(detail,cap,selected.labels.text.empty()?selected.labels.name.c_str():selected.labels.text.c_str());return true;
 }
 
 int PositiveTravelConfirmScore(const Labels& labels) {
@@ -3059,8 +2617,6 @@ bool EnsureShared() {
     return true;
 }
 
-#include "dungeon_activity_bridge.inl"
-
 void ProcessRequest() {
     if (!EnsureShared()) return;
     const LONG seq = g_shared->requestSeq;
@@ -3075,7 +2631,14 @@ void ProcessRequest() {
         SetText(detail, _countof(detail), L"Sai callback thread; action bị chặn");
     } else {
         const Command cmd = static_cast<Command>(g_shared->request.command);
-        switch (cmd) {
+        const bool protectedCommand = IsLicenseProtectedCommand(cmd);
+        const bool licenseProofOk = !protectedCommand ||
+            (g_shared->licenseGate != 0 && g_shared->licenseSessionToken != 0 &&
+             g_shared->requestLicenseProof == LicenseRequestProof(
+                 g_shared->licenseSessionToken, seq, g_shared->request));
+        if (!licenseProofOk) {
+            SetText(detail, _countof(detail), L"LICENSE BRIDGE GUARD: mutating command bị chặn");
+        } else switch (cmd) {
             case Command::ReadState:
                 ok = ReadState(r.snapshot, detail, _countof(detail)); break;
             case Command::ReadCurrency:
@@ -3094,14 +2657,6 @@ void ProcessRequest() {
                 ok = ClickTravelSemantic(static_cast<TravelSemantic>(g_shared->request.arg0), r, detail, _countof(detail)); break;
             case Command::ConfirmTravelSemantic:
                 ok = ConfirmTravelSemantic(r, detail, _countof(detail)); break;
-            case Command::ScanNearbyMonsters:
-                ok = ScanNearbyMonsters(r, detail, _countof(detail)); break;
-            case Command::ClickDialogText:
-                ok = ClickDialogTextExact(g_shared->request.text, r, detail, _countof(detail)); break;
-            case Command::ReadDungeonProgress:
-                ok = ReadDungeonProgress(r, detail, _countof(detail)); break;
-            case Command::ReadDungeonActivityBoard:
-                ok = ReadDungeonActivityBoard(g_shared->request.arg0, r, detail, _countof(detail)); break;
             case Command::ToggleRide:
                 ok = ToggleRide(g_shared->request.arg0 != 0, detail, _countof(detail)); break;
             case Command::StartPath:
@@ -3130,10 +2685,8 @@ void ProcessRequest() {
                 ok = CloseBackgroundSell(r, detail, _countof(detail)); break;
             case Command::ClickInternalPoint:
                 ok = ClickInternalPoint(g_shared->request.arg0, g_shared->request.arg1,
+                                        g_shared->request.arg2 != 0,
                                         r, detail, _countof(detail)); break;
-            case Command::ClickInternalPointRawTest:
-                ok = ClickInternalPointRawTest(g_shared->request.arg0, g_shared->request.arg1,
-                                               r, detail, _countof(detail)); break;
             case Command::BeginBackgroundTreatment:
                 ok = BeginBackgroundTreatment(g_shared->request.arg0, r, detail, _countof(detail)); break;
             case Command::AdvanceBackgroundTreatment:

@@ -29,10 +29,10 @@ for blob in (map_blob, click_blob):
     assert unesc(esc(blob)) == blob
 
 for token in [
-    'TLMASTERCFG\\t2', 'MAP_BLOB', 'CLICK_BLOB', 'RENDEZVOUS',
+    'TLMASTERCFG\\t3', 'MAP_BLOB', 'CLICK_BLOB', 'RENDEZVOUS',
     'SELLNPC_COUNT', 'SHORTCUT_COUNT', 'THDC_COUNT\\t7',
-    'KUNLUN_EXIT_CLICK', 'ApplyThdcCoordinatePairs',
-    'shortcutSettings_.kunlunExitClicks=incoming.kunlunExitClicks', 'END'
+    'KUNLUN_EXIT_CLICK', 'POST_TRADE_CLICK', 'ApplyThdcCoordinatePairs',
+    'shortcutSettings_.kunlunExitClicks=incoming.kunlunExitClicks', 'shortcutSettings_.postTradeClick=incoming.postTradeClick', 'END'
 ]:
     assert token in C, token
 
@@ -61,9 +61,10 @@ for snippet in [
 ]:
     assert snippet in H, snippet
 
-assert '(masterVersion!=1&&masterVersion!=2)' in C
+assert '(masterVersion!=1&&masterVersion!=2&&masterVersion!=3)' in C
 assert 'masterVersion==1 && sawLegacyKunlunClick' in C
 assert 'masterVersion==2 && expectedThdc==7 && thdcSeen==7 && kunlunClickSeen==3' in C
+assert 'masterVersion==3 && expectedThdc==7 && thdcSeen==7 && kunlunClickSeen==3 && sawPostTradeClick' in C
 
 fn = re.search(r'void ImportPortableMasterConfig\(\) \{(.*?)\n    \}\n\n    void LoadTradeSettings', C, re.S)
 assert fn, 'cannot isolate ImportPortableMasterConfig'
@@ -78,19 +79,27 @@ for old in ['L"XUẤT MAP", BS_PUSHBUTTON', 'L"NHẬP MAP", BS_PUSHBUTTON',
 
 assert '1190,1603' not in C and '1190, 1603' not in C
 
-# Dồn đồ CON→MAIN: v1.4 MAIN-delta + v3.3 clean MAIN/CON macro contract.
+# Dồn đồ CON→MAIN v9.9: four admitted travellers, arrived-only FIFO,
+# stationary MAIN, >=9 capacity gate, and one hidden idle/capacity click.
 TC = (ROOT / 'src/trade_coordinator_logic.h').read_text(encoding='utf-8')
+FS = (ROOT / 'src/fixed_slot_sell_logic.h').read_text(encoding='utf-8')
 assert 'kReceivedSlotsFinishThreshold = 8' in TC
+assert 'kTradePassMaxItems = kReceivedSlotsFinishThreshold + 1' in TC
+assert 'kMaxTravelingChildren = 4' in TC
 assert 'enum class PassDecision { FinishChild, RepeatSameChild };' in TC
+assert 'enum class PostPassAction { SellPauseSameChild, FinishChild, RepeatSameChild };' in TC
 assert 'ReceivedSlots(beforeFree, afterFree) <= kReceivedSlotsFinishThreshold' in TC
-assert 'CanStartTradePass' in TC
+assert 'if (MainNeedsCapacitySell(afterFree)) return PostPassAction::SellPauseSameChild;' in TC
+assert 'return freeBagSpace >= kTradePassMaxItems;' in TC
+assert 'freeBagSpace < kTradePassMaxItems' in TC
+assert 'ShouldAssignArrivalTicket' in TC
 assert 'CoordinatorInternalPointAction(' in C
 assert 'PostBackgroundClientClick' not in C
 for forbidden in ['InvalidSnapshot', 'WaitForSnapshot', 'IsFreshPostTradeSnapshot',
                   'IsFullTradePassDelta', 'RepeatPreparation', 'EffectiveMainSellThreshold',
                   'TradeTransferRepeatLimit', 'CHUYỂN ĐỒ', 'HasChildTransferStep',
                   'TradeStepKindLabel', 'tradeSeqKind_', 'IDC_SEQ_KIND',
-                  'MainSellThreshold', 'mainSellThreshold_']:
+                  'MainSellThreshold', 'mainSellThreshold_', 'YieldActiveTradeForMainSell']:
     assert forbidden not in TC and forbidden not in C, forbidden
 assert 'NormalizeChildPreClickContract' not in C
 assert 'firstStored' not in C
@@ -99,26 +108,40 @@ assert 'tradeTxn_.sequenceIndex = 1;' not in C
 assert 'if (childTradeSequence_.empty())' in C
 assert 'for (std::size_t i = 0; i < childTradeSequence_.size(); ++i)' in C
 assert 'while (index > 0 && seq[index - 1].groupId == id)' in C
-assert 'kTradeBagStableMs = 1500' in C
-assert 'kTradeBagVerifyMaxMs = 3200' in C
-assert 'const int repeatLimit = effective->repeat;' in C
+assert 'kTradeBagStableMs = 1000' in C
+assert 'kTradeBagVerifyMaxMs = 2000' in C
+assert 'if (tradeTxn_.phase == TradePhase::Sequence)' in C
+assert 'tradeTxn_.phase != TradePhase::TargetMain' in C
+assert 'ArmMainGapClickAfterPostPass(now, main' in C
+assert 'ArmMainGapClickAfterPostPass(now, *activeMain' in C
+assert 'savedSequenceFinished' not in C
+assert 'const int repeatLimit = std::max(1, effective->repeat);' in C
 assert 'capByMain' not in C
 assert 'TLCLICKCFG\\t2' in C
 assert 'if (f.size()!=14)' in C
-assert 'tradeTxn_.phase != TradePhase::Sequence && !CanStartTradePass(main->snapshot.freeBagSpace)' in C
-assert 'YieldActiveTradeForMainSell' in C
-assert 'CON hiện tại về train' in C and 'CON FIFO đứng chờ' in C
-assert 'if (tradeRole == 1) return !CanStartTradePass(freeBagSpace);' in TC
-
-repeat_start = C.find('if (DecidePass(beforeFree, afterFree) == PassDecision::RepeatSameChild) {')
-repeat_end = C.find('LogAccount(main, L"GD PASS CUỐI v1.4', repeat_start)
-repeat = C[repeat_start:repeat_end] if repeat_start >= 0 and repeat_end > repeat_start else ''
-assert repeat, 'cannot isolate v1.4 repeat branch'
-assert 'tradeTxn_.sequenceIndex = 0;' in repeat
-assert 'tradeTxn_.phase = TradePhase::TargetMain;' in repeat
-assert 'TARGET LẠI MAIN ID' in repeat
-assert 'child.snapshot.freeBagSpace' not in repeat
-assert 'ShouldAdmitFullChild' not in repeat
+assert 'lastTradePassFreeBagSpace' not in C
+assert 'EffectiveClickCount' not in C and 'EffectiveClickCount' not in FS
+assert 'TickMainStationarySell' not in C
+assert 'TickMainIdleClick' in C and 'TickMainFullSellBatch' in C
+assert 'LegacyIdleClickSourceIndex' in FS
+assert 'kDefaultFullBatchClickCount = 90' in FS
+assert 'const PostPassAction postPass = DecidePostPass(beforeFree, afterFree);' in C
+assert 'postPass == PostPassAction::SellPauseSameChild' in C
+assert 'PauseTradeForMainSell(TradePhase::TargetMain' in C
+assert 'GIỮ NGUYÊN GD DỞ' in C
+assert 'tradeTravelPids_' in C and 'tradeQueuePids_' in C
+assert 'CHƯA có số FIFO' in C and 'ĐÃ TỚI TỌA GD → nhận FIFO' in C
+assert 'tradeQueuePids_.empty() && main->runtime.sellPhase == 0' in C
+assert 'MainNeedsCapacitySell(main->snapshot.freeBagSpace)' in C
+assert 'CON tới sẽ ưu tiên GD' in C
+assert 'rt.sellMacroRepeatDone >= rt.sellMacroPass' in C
+assert 'if (CanStartTradePass(free))' in C
+assert 'if (!MainBagIsFull(main.snapshot.freeBagSpace))' not in C
+assert 'MAIN VẪN <9 Ô sau đủ' in C
+assert 'a.snapshotValid && (a.snapshot.validMask & ValidAutoPath) && a.snapshot.autoPathing' in C
+assert 'a.bridge.Call(Command::StopPath' in C
+assert 'Command::ClickInternalPoint' in C
+assert 'child.snapshot.freeBagSpace' not in C
 
 rv_start = C.find('if (tradeTxn_.phase == TradePhase::Rendezvous) {')
 rv_end = C.find('if (tradeTxn_.phase == TradePhase::TargetMain) {', rv_start)
@@ -126,6 +149,7 @@ rv = C[rv_start:rv_end] if rv_start >= 0 and rv_end > rv_start else ''
 assert rv, 'cannot isolate Rendezvous -> TargetMain'
 assert 'CoordinatorInternalPointAction' not in rv
 assert 'tradeTxn_.phase = TradePhase::TargetMain;' in rv
+assert 'MAIN <9 ô trước pass mới' in rv
 
 target_start = rv_end
 target_end = C.find('if (tradeTxn_.phase == TradePhase::Sequence) {', target_start)
@@ -133,6 +157,6 @@ target = C[target_start:target_end] if target_start >= 0 and target_end > target
 assert target, 'cannot isolate TargetMain -> Sequence'
 assert 'Command::SelectTargetByRoleID' in target
 assert 'tradeTxn_.sequenceIndex = 0;' in target
-assert 'tradeTxn_.sequencePass = 1;' not in target
+assert 'MAIN <9 ô trước khi target/click pass' in target
 
-print('TLMASTER v2 + THDC round-trip/contract: PASS')
+print('TLMASTER v3 + POST-TRADE + THDC + v9.9 trade contract: PASS')

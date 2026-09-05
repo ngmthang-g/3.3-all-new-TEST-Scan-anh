@@ -1,0 +1,4 @@
+project_id = "auto-than-long-pro-license"
+
+[functions.license-api]
+verify_jwt = false

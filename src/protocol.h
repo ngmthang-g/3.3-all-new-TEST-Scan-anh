@@ -6,10 +6,10 @@
 namespace cleanroute {
 
 constexpr std::uint32_t kMagic = 0x4352544Cu; // CRTL
-// v3.0 keeps all hidden UI actions on the proven InputSyncManager path and adds
-// strict THĐC routing plus the configured three-click Côn Lôn exit sequence.
-// Controller + Bridge are always shipped together; mismatched versions fail attach.
-constexpr std::uint32_t kProtocolVersion = 0x00040900u;
+// v3.2 keeps the proven v3.1 action gate and makes the command proof less
+// recognizable to static scanners by deriving proof constants at runtime from
+// split volatile parts. Controller + Bridge are always shipped together.
+constexpr std::uint32_t kProtocolVersion = 0x00030200u;
 constexpr UINT kWakeMessage = WM_APP + 0x531;
 constexpr wchar_t kMappingPrefix[] = L"Local\\ThanLongCleanRoute_";
 
@@ -39,11 +39,6 @@ enum class Command : std::uint32_t {
     SelectTargetByRoleID = 22,
     ClickTravelSemantic = 23,
     ConfirmTravelSemantic = 24,
-    ScanNearbyMonsters = 25,
-    ClickDialogText = 26,
-    ReadDungeonProgress = 27,
-    ReadDungeonActivityBoard = 28,
-    ClickInternalPointRawTest = 29,
 };
 
 enum class TravelSemantic : std::int32_t {
@@ -51,11 +46,6 @@ enum class TravelSemantic : std::int32_t {
     KunLunSon = 1,
     TinhTucHai = 2,
     DenCacMonPhai = 3,
-    NamHai = 4,
-    MieuCuong = 5,
-    HoangLongPhu = 6,
-    ThachLam = 7,
-    DaiLy = 8,
 };
 
 enum class ActionResult : std::int32_t {
@@ -65,19 +55,6 @@ enum class ActionResult : std::int32_t {
     NoCandidate = 3,
     UiClosed = 4,
     NothingToClose = 5,
-};
-
-
-constexpr std::size_t kMaxMonsterRecords = 96;
-enum MonsterValid : std::uint32_t {
-    MonsterValidIdentity=1u<<0, MonsterValidTemplate=1u<<1, MonsterValidVitals=1u<<2,
-    MonsterValidDeath=1u<<3, MonsterValidPosition=1u<<4, MonsterValidType=1u<<5,
-    MonsterValidName=1u<<6, MonsterValidClassProof=1u<<7, MonsterValidLiveVitals=1u<<8,
-};
-enum class MonsterHpSource : std::int32_t { None=0, SemanticGetter=1, GuardedGRoleSubclassRva=2 };
-struct MonsterRecord {
-    std::uint32_t validMask=0; std::int32_t roleID=0,resID=0,type=0,hp=-1,maxHP=-1,dead=0,x=0,y=0;
-    std::int32_t hpSource=static_cast<std::int32_t>(MonsterHpSource::None); wchar_t name[64]{}; wchar_t className[40]{};
 };
 
 enum SnapshotValid : std::uint32_t {
@@ -113,8 +90,56 @@ struct Request {
     std::int32_t arg0 = 0;
     std::int32_t arg1 = 0;
     std::int32_t arg2 = 0;
-    wchar_t text[160]{};
 };
+
+inline bool IsLicenseProtectedCommand(Command command) {
+    switch (command) {
+        case Command::None:
+        case Command::ReadState:
+        case Command::ReadCurrency:
+        case Command::ReadBagPage:
+            return false;
+        default:
+            return true;
+    }
+}
+
+inline std::uint64_t Rotl64(std::uint64_t v, unsigned r) {
+    return (v << (r & 63u)) | (v >> ((64u - r) & 63u));
+}
+inline std::uint64_t LicenseProofPepper() {
+    volatile std::uint64_t p0 = 0x243F6A8885A308D3ull;
+    volatile std::uint64_t p1 = 0x13198A2E03707344ull;
+    volatile std::uint64_t p2 = 0xA4093822299F31D0ull;
+    std::uint64_t v = p0 ^ Rotl64(p1, 19) ^ Rotl64(p2, 41);
+    v ^= 0x082EFA98EC4E6C89ull;
+    v ^= v >> 29;
+    v *= 0x9E3779B185EBCA87ull;
+    v ^= v >> 32;
+    return v;
+}
+inline std::uint64_t LicenseProofMulA() {
+    volatile std::uint64_t a = 0xD1B54A32D192ED03ull;
+    volatile std::uint64_t b = 0xABC98388FB8FAC03ull;
+    return (a ^ Rotl64(b, 23)) | 1ull;
+}
+inline std::uint64_t LicenseProofMulB() {
+    volatile std::uint64_t a = 0x8CB92BA72F3D8DD7ull;
+    volatile std::uint64_t b = 0xDB4F0B9175AE2165ull;
+    return (a ^ Rotl64(b, 31)) | 1ull;
+}
+inline std::uint64_t LicenseRequestProof(std::uint64_t sessionToken, LONG seq, const Request& request) {
+    std::uint64_t v = sessionToken ^ LicenseProofPepper();
+    v ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(seq)) * LicenseProofMulA();
+    v = Rotl64(v, 17) ^ (static_cast<std::uint64_t>(request.command) * LicenseProofMulB());
+    v = Rotl64(v, 23) ^ static_cast<std::uint32_t>(request.arg0);
+    v = Rotl64(v, 29) ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(request.arg1)) << 1);
+    v = Rotl64(v, 31) ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(request.arg2)) << 7);
+    v ^= v >> 33; v *= LicenseProofMulB();
+    v ^= v >> 33; v *= LicenseProofMulA();
+    v ^= v >> 33;
+    return v ? v : 1ull;
+}
 
 
 struct BagItemSnapshot {
@@ -145,67 +170,6 @@ struct BagPageSnapshot {
     BagItemSnapshot items[kBagPageCapacity]{};
 };
 
-
-constexpr std::size_t kMaxDungeonTasks = 12;
-constexpr std::size_t kMaxDungeonTaskParameters = 48;
-
-enum DungeonTaskValid : std::uint32_t {
-    DungeonTaskValidIdentity   = 1u << 0,
-    DungeonTaskValidName       = 1u << 1,
-    DungeonTaskValidParameters = 1u << 2,
-};
-
-struct DungeonTaskParameter {
-    std::int32_t key = 0;
-    std::int32_t value = 0;
-};
-
-struct DungeonTaskRecord {
-    std::uint32_t validMask = 0;
-    std::int32_t taskID = 0;
-    std::uint32_t parameterCount = 0;
-    std::int32_t parameterTruncated = 0;
-    wchar_t name[96]{};
-    DungeonTaskParameter parameters[kMaxDungeonTaskParameters]{};
-};
-
-struct DungeonProgressSnapshot {
-    std::uint32_t validMask = 0;
-    std::uint64_t capturedTick = 0;
-    std::uint32_t taskCount = 0;
-    std::int32_t taskTruncated = 0;
-    // FuBen fields are intentionally reserved until a concrete inbound/runtime response store is
-    // proven on the frozen client. Packet IDs alone are not treated as progress proof.
-    std::uint32_t fubenValidMask = 0;
-    std::int32_t fubenCurrent = -1;
-    std::int32_t fubenTarget = -1;
-    std::int32_t fubenCompleted = -1;
-    DungeonTaskRecord tasks[kMaxDungeonTasks]{};
-};
-
-
-constexpr std::size_t kMaxDungeonActivityObjectives = 24;
-
-struct DungeonActivityObjectiveSnapshot {
-    std::int32_t current = -1;
-    std::int32_t target = -1;
-    std::int32_t objectiveId = 0;
-    wchar_t name[128]{};
-};
-
-struct DungeonActivitySnapshot {
-    std::uint32_t validMask = 0;
-    std::int32_t synchronized = 0;
-    std::int32_t activityId = 0;
-    std::int32_t mapID = 0;
-    std::int32_t remainingSeconds = -1;
-    std::uint64_t capturedTick = 0;
-    std::uint32_t objectiveCount = 0;
-    wchar_t activityName[96]{};
-    wchar_t source[64]{};
-    DungeonActivityObjectiveSnapshot objectives[kMaxDungeonActivityObjectives]{};
-};
-
 struct Response {
     std::int32_t ok = 0;
     std::int32_t resultCode = 0;
@@ -215,11 +179,6 @@ struct Response {
     std::int64_t value64_1 = 0;
     Snapshot snapshot{};
     BagPageSnapshot bagPage{};
-    DungeonProgressSnapshot dungeonProgress{};
-    DungeonActivitySnapshot dungeonActivity{};
-    std::uint32_t monsterCount=0, scannedEntries=0, excludedPlayerRoles=0, excludedOtherSprites=0, monsterHpReadFailures=0;
-    std::int32_t monsterTruncated=0;
-    MonsterRecord monsters[kMaxMonsterRecords]{};
     wchar_t detail[512]{};
 };
 
@@ -232,11 +191,12 @@ struct SharedBlock {
     volatile LONG completedSeq = 0;
     volatile LONG bridgeLoaded = 0;
     volatile LONG bridgeBusy = 0;
+    volatile LONG licenseGate = 0;
+    std::uint64_t licenseSessionToken = 0;
+    std::uint64_t requestLicenseProof = 0;
     Request request{};
     Response response{};
 };
-
-static_assert(sizeof(SharedBlock) < 256u * 1024u, "Shared bridge block must remain bounded");
 
 inline void MappingName(DWORD pid, wchar_t* output, std::size_t count) {
     if (!output || count == 0) return;

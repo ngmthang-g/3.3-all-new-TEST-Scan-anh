@@ -6,23 +6,33 @@
 
 namespace fixed_slot_sell_logic {
 
-constexpr int kInitialClickCount = 90;
+constexpr int kDefaultFullBatchClickCount = 90;
+constexpr int kDefaultClickDelayMs = 600;
 constexpr int kCoordinateScale = 1000000;
 
-// v0.5 profiles normally keep the item-cell click at row 5.  v0.6.1 users may
-// already have reduced the now-semantic sell sequence to one coordinate row.
-inline int ConfigRowIndex(std::size_t rowCount) {
+// Parser/migration compatibility only. Runtime no longer has a first-sale or
+// adaptive-sale mode; old config readers may still use this historical name.
+constexpr int kInitialClickCount = kDefaultFullBatchClickCount;
+
+// One-time compatibility bridge for old multi-row sell configs. The runtime no
+// longer executes a sell sequence. If an old profile still has >=5 rows, only
+// the former item-cell row (#5) is retained as the single MAIN idle click.
+inline int LegacyIdleClickSourceIndex(std::size_t rowCount) {
     if (rowCount == 0) return -1;
     return rowCount >= 5 ? 4 : static_cast<int>(rowCount - 1);
 }
 
-// The first completed sale uses the historical 90-click ceiling.  Just like
-// v0.5 Step 5, later sales use the stable FreeBagSpace learned after the prior
-// sale and never exceed that ceiling.
-inline int EffectiveClickCount(int learnedFreeBagSpace) {
-    return learnedFreeBagSpace > 0
-        ? std::clamp(learnedFreeBagSpace, 1, kInitialClickCount)
-        : kInitialClickCount;
+// Repeat is used for one complete capacity-recovery batch whenever a waiting
+// or active CON exists and MAIN has <9 free slots. Idle mode itself is infinite
+// and performs one click per delay while no CON has arrived at TỌA GD.
+inline int ClampFullBatchClickCount(int configuredCount) {
+    const int value = configuredCount > 0 ? configuredCount : kDefaultFullBatchClickCount;
+    return std::clamp(value, 1, 999);
+}
+
+inline int ClampClickDelayMs(int configuredDelayMs) {
+    const int value = configuredDelayMs > 0 ? configuredDelayMs : kDefaultClickDelayMs;
+    return std::clamp(value, 50, 60000);
 }
 
 inline int NormalizeClientCoordinate(int value, int extent) {
