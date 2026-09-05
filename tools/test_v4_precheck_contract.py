@@ -5,8 +5,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 cp2 = ROOT / 'tools' / 'apply_v99_automation_cp2.py'
-if not cp2.exists():
-    raise SystemExit('V4 PRECHECK CONTRACT FAIL: missing tools/apply_v99_automation_cp2.py')
+impl = ROOT / 'tools' / 'apply_v99_automation_cp2_impl.py'
+if not cp2.exists() or not impl.exists():
+    raise SystemExit('V4 PRECHECK CONTRACT FAIL: missing CP2 patch implementation')
 
 with tempfile.TemporaryDirectory() as td:
     out = Path(td)
@@ -34,16 +35,18 @@ workflow = (ROOT / '.github/workflows/build-v99-special.yml').read_text(encoding
 
 checks = {
     'precheck config fields': all(x in core for x in ['bagUiTemplatePath', 'bagUiRoi', 'bagUiSwitch']),
-    'precheck manual persistence': all(x in core for x in ['precheck_path=', 'precheck_roi=', 'precheck_switch=']),
+    'portable manual scan export': all(x in core for x in ['precheck_file=', '_precheck', 'precheck_roi=', 'precheck_switch=', 'config + 4 ảnh mẫu']),
     'precheck persistent settings': all(x in auto for x in ['precheck_path=', 'precheck_roi=', 'precheck_switch=']),
     'precheck developer UI': 'PRECHECK TAY NẢI' in core and 'LẤY F8 PRECHECK' in core,
-    'precheck image + roi UI': 'IDC_PRECHECK_PICK' in core and 'IDC_PRECHECK_REGION' in core and 'IDC_PRECHECK_PREVIEW' in core,
+    'precheck image + roi UI': all(x in core for x in ['IDC_PRECHECK_PICK', 'IDC_PRECHECK_REGION', 'IDC_PRECHECK_PREVIEW', 'IDC_PRECHECK_FULL']),
+    'reuse proven F8 capture': 'ArmBagF8(*s,-6,L"PRECHECK TAY NẢI")' in core and 's.captureRow==-6' in core,
     'runtime precheck phase': 'WaitPrecheckSwitch' in auto and 'startPrecheckCompleted' in auto,
-    'runtime scan before open bag': 'AutoRunStartPrecheck' in auto and 'AutoOpenNext(s,now,1,error)' in auto,
+    'runtime scan before open bag': 'AutoRunStartPrecheck' in auto and 'if(!AutoRunStartPrecheck(s,now,error))' in auto,
     'match skips switch click': 'PRECHECK TAY NẢI PASS' in auto,
-    'mismatch clicks configured point': 'PRECHECK TAY NẢI MISS' in auto and 'bagUiSwitch' in auto,
-    'reset keeps one-per-start latch': 'void ResetAutoFilter(HWND gameWindow, int childSlot)' in auto and 'startPrecheckCompleted=false' not in auto,
+    'mismatch clicks configured point': 'PRECHECK TAY NẢI MISS' in auto and 'AutoClickStep(s,s.scan.config.bagUiSwitch,error)' in auto,
+    'reset keeps one-per-start latch': 'void ResetAutoFilter(HWND gameWindow, int childSlot)' in auto and 's.startPrecheckCompleted=false' not in auto and 's.startPrecheckCompleted = false' not in auto,
     'stop creates next start boundary': 'g_autoSessions.erase(key)' in auto,
+    'full can preempt precheck delay': 'WaitPrecheckSwitch||s.phase==AutoPhase::WaitOpen1' in auto,
     'cp2 build order after cp1': cmake.find('apply_v99_automation_cp2.py') > cmake.find('apply_v99_automation_cp1.py') >= 0,
     'workflow runs precheck contract': 'test_v4_precheck_contract.py' in workflow,
 }
