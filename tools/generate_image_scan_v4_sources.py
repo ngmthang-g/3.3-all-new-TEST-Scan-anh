@@ -27,8 +27,8 @@ def replace_between(text, start, end, replacement, label):
 # protocol.h: isolated raw scan command. Keep protocol version pinned by v9.9 contracts.
 p = (root/'src/protocol.h').read_text(encoding='utf-8-sig')
 p = once(p,
-'''    ClickTravelSemantic = 23,\n    ConfirmTravelSemantic = 24,\n};''',
-'''    ClickTravelSemantic = 23,\n    ConfirmTravelSemantic = 24,\n    // FILTER V4 only: image recognition -> raw InputSync click, independent of AUTO state.\n    ClickInternalPointRawTest = 25,\n};''', 'protocol command')
+'''    ClickTravelSemantic = 23,\n    ConfirmTravelSemantic = 24,\n    TestOpenBag = 25,\n};''',
+'''    ClickTravelSemantic = 23,\n    ConfirmTravelSemantic = 24,\n    TestOpenBag = 25,\n    // FILTER V4 only: image recognition -> raw InputSync click, independent of AUTO state.\n    ClickInternalPointRawTest = 26,\n};''', 'protocol command')
 (out/'protocol.h').write_text(p, encoding='utf-8', newline='\n')
 
 # bridge.cpp: raw InputSync primitive for FILTER V4, bypassing AUTO SafeForAction only.
