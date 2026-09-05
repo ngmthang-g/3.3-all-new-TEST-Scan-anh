@@ -31,11 +31,30 @@ jobs:
           )
           foreach($p in $parts){ if(!(Test-Path $p)){ throw "missing CP9 payload chunk: $p" } }
           $payload='cp9_source_payload.zip'
+          $decodedParts=New-Object System.Collections.Generic.List[byte[]]
+          $individualOk=$true
+          foreach($p in $parts){
+            try {
+              $text=([IO.File]::ReadAllText($p) -replace '\s','')
+              $decodedParts.Add([Convert]::FromBase64String($text))
+            } catch {
+              $individualOk=$false
+              break
+            }
+          }
           try {
-            $encoded = ($parts | ForEach-Object { [IO.File]::ReadAllText($_) }) -join ''
-            $encoded = $encoded -replace '\s',''
-            $bytes = [Convert]::FromBase64String($encoded)
-            [IO.File]::WriteAllBytes($payload,$bytes)
+            if($individualOk){
+              $stream=[IO.File]::Create($payload)
+              try {
+                foreach($chunk in $decodedParts){ $stream.Write($chunk,0,$chunk.Length) }
+              } finally { $stream.Dispose() }
+              Write-Host 'CP9 payload reconstructed by decoding each staged chunk.'
+            } else {
+              $encoded = ($parts | ForEach-Object { [IO.File]::ReadAllText($_) }) -join ''
+              $encoded = $encoded -replace '\s',''
+              [IO.File]::WriteAllBytes($payload,[Convert]::FromBase64String($encoded))
+              Write-Host 'CP9 payload reconstructed from concatenated base64 stream.'
+            }
           } catch {
             throw "CP9 payload base64 reconstruction failed: $($_.Exception.Message)"
           }
