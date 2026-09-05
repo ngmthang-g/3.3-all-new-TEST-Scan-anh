@@ -32,21 +32,24 @@ with tempfile.TemporaryDirectory() as td:
     controller = (out / 'controller.cpp').read_text(encoding='utf-8-sig')
     bridge = (out / 'bridge.cpp').read_text(encoding='utf-8-sig')
     protocol = (out / 'protocol.h').read_text(encoding='utf-8-sig')
+    image_test = (out / 'image_scan_test.cpp').read_text(encoding='utf-8-sig')
+    image_auto = (out / 'image_scan_auto_ext.inl').read_text(encoding='utf-8-sig')
 
 cmake = (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8-sig')
 workflow = (ROOT / '.github/workflows/build-v99-special.yml').read_text(encoding='utf-8-sig')
+party_logic = (ROOT / 'src' / 'party_build_logic.h').read_text(encoding='utf-8-sig')
 
 checks = {
     # CP1 trade sequence remains intact.
     'trade semantic preserved': 'TravelSemantic::Trade' in protocol and 'key == L"giaodich"' in bridge,
-    'trade target then opener then semantic then sequence': all(x in controller for x in [
+    'trade target/opener/semantic/sequence wiring preserved': all(x in controller for x in [
         'Command::SelectTargetByRoleID', 'postTradeClick', 'TravelSemantic::Trade', 'TradePhase::Sequence'
     ]),
 
     # CP2 precheck persistence / boundary survives later patches.
-    'precheck persistence preserved': all(x in controller for x in [
-        'precheck_path=', 'precheck_roi=', 'precheck_switch='
-    ]) or all(x in controller for x in ['PRECHECK TAY NẢI', 'LẤY F8 PRECHECK']),
+    'precheck UI preserved': 'PRECHECK TAY NẢI' in image_test and 'LẤY F8 PRECHECK' in image_test,
+    'precheck persistence preserved': all(x in image_auto for x in ['precheck_path=', 'precheck_roi=', 'precheck_switch=']),
+    'precheck runtime preserved': all(x in image_auto for x in ['WaitPrecheckSwitch', 'startPrecheckCompleted', 'PRECHECK TAY NẢI PASS', 'PRECHECK TAY NẢI MISS']),
 
     # CP3 bulk/gather behavior survives CP4/CP5.
     'bulk controls preserved': all(x in controller for x in ['ÁP BÃI PT', 'ÁP ALL CON']),
@@ -67,7 +70,7 @@ checks = {
         'L"ĐẶT KEY"', 'L"TỰ TẠO PT: OFF"', 'L"TẬP TRUNG: OFF"', 'L"ÁP BÃI PT"', 'L"ÁP ALL CON"'
     ]),
     'party semantic exact': 'TravelSemantic::InviteParty' in protocol and 'key == L"moivaonhom"' in bridge,
-    'party excludes key itself': 'member != &key' in controller and 'memberRoleId != keyRoleId' in (ROOT / 'src' / 'party_build_logic.h').read_text(encoding='utf-8-sig'),
+    'party excludes key itself': 'member != &key' in controller and 'memberRoleId != keyRoleId' in party_logic,
     'party start stops gather': 'if (gatherModeActive_) StopGatherMode();' in controller,
     'gather start stops party': 'if (partyBuildModeActive_) StopPartyBuildMode(L"chuyển sang TẬP TRUNG")' in controller,
     'normal start blocked by exclusive modes': 'if (gatherModeActive_ || partyBuildModeActive_)' in controller,
