@@ -60,6 +60,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'v9.9 CP5 full regression verifier failed' }
           python tools/test_v99_automation_cp6_regression.py
           if ($LASTEXITCODE -ne 0) { throw 'v9.9 CP6 gather/train + party popup regression verifier failed' }
+          python tools/test_v99_scan_v4_auto_tab_contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'v9.9 CP7 Scan V4 AUTO-tab contract verifier failed' }
 
       - name: Configure x64 Release
         shell: powershell
