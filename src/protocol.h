@@ -47,6 +47,7 @@ enum class TravelSemantic : std::int32_t {
     KunLunSon = 1,
     TinhTucHai = 2,
     DenCacMonPhai = 3,
+    Trade = 4,
 };
 
 enum class ActionResult : std::int32_t {
