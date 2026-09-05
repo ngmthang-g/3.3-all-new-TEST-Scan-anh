@@ -18,7 +18,11 @@ jobs:
           fetch-depth: 0
 
       - name: Apply isolated patch
-        run: python .github/scripts/apply_test_open_bag.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/coordinates, UIButton.HandleClickEvent, sell\/trade state/coordinates, native button callbacks, sell\/trade state/' .github/scripts/apply_test_open_bag.py
+          python .github/scripts/apply_test_open_bag.py
 
       - name: Commit patch
         shell: bash
