@@ -41,7 +41,7 @@ party_logic = (ROOT / 'src' / 'party_build_logic.h').read_text(encoding='utf-8-s
 
 checks = {
     # CP1 trade sequence remains intact.
-    'trade semantic preserved': 'TravelSemantic::Trade' in protocol and 'key == L"giaodich"' in bridge,
+    'trade semantic preserved': 'Trade = 4' in protocol and 'case TravelSemantic::Trade: return key == L"giaodich";' in bridge,
     'trade target/opener/semantic/sequence wiring preserved': all(x in controller for x in [
         'Command::SelectTargetByRoleID', 'postTradeClick', 'TravelSemantic::Trade', 'TradePhase::Sequence'
     ]),
@@ -69,7 +69,7 @@ checks = {
     'quick management compact row': all(x in controller for x in [
         'L"ĐẶT KEY"', 'L"TỰ TẠO PT: OFF"', 'L"TẬP TRUNG: OFF"', 'L"ÁP BÃI PT"', 'L"ÁP ALL CON"'
     ]),
-    'party semantic exact': 'TravelSemantic::InviteParty' in protocol and 'key == L"moivaonhom"' in bridge,
+    'party semantic exact': 'InviteParty = 5' in protocol and 'case TravelSemantic::InviteParty: return key == L"moivaonhom";' in bridge,
     'party excludes key itself': 'member != &key' in controller and 'memberRoleId != keyRoleId' in party_logic,
     'party start stops gather': 'if (gatherModeActive_) StopGatherMode();' in controller,
     'gather start stops party': 'if (partyBuildModeActive_) StopPartyBuildMode(L"chuyển sang TẬP TRUNG")' in controller,
