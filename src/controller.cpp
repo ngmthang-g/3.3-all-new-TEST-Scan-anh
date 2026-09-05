@@ -175,6 +175,7 @@ constexpr int IDC_IMPORT_MAP_CONFIG = 213;
 constexpr int IDC_ENABLE_SHORTCUT = 214;
 constexpr int IDC_SHORTCUT_SETTINGS = 215;
 constexpr int IDC_TEST_OPEN_BAG = 5000; // TEST-ONLY semantic open bag probe
+constexpr int IDC_DEVELOPER_PASSWORD = 5001;
 // Shortcut settings secondary window. 630-699 is isolated from inventory/Telegram IDs.
 constexpr int IDC_SC_THEME = 630;
 constexpr int IDC_SC_KUNLUN_X = 631;
@@ -1893,7 +1894,8 @@ private:
             tab.pszText = const_cast<wchar_t*>(L"AUTO PHÓ BẢN"); TabCtrl_InsertItem(mainTab_, 2, &tab);
             tab.pszText = const_cast<wchar_t*>(L"TELE / LOG"); TabCtrl_InsertItem(mainTab_, 3, &tab);
             tab.pszText = const_cast<wchar_t*>(L"GIỚI THIỆU"); TabCtrl_InsertItem(mainTab_, 4, &tab);
-            TabCtrl_SetItemSize(mainTab_, (kMainTabWidth - 8) / 5, 28);
+            tab.pszText = const_cast<wchar_t*>(L"DEVELOPER"); TabCtrl_InsertItem(mainTab_, 5, &tab);
+            TabCtrl_SetItemSize(mainTab_, (kMainTabWidth - 8) / 6, 28);
             TabCtrl_SetCurSel(mainTab_, 0);
         }
         tradeStatus_ = Make(L"STATIC", L"ĐIỀU PHỐI: khởi động...", SS_LEFT | SS_CENTERIMAGE | WS_BORDER,
@@ -1957,7 +1959,8 @@ private:
         shortcutSettingsButton_ = Make(L"BUTTON", L"TÙY CHỈNH", BS_PUSHBUTTON, 596, 345, 124, 27, IDC_SHORTCUT_SETTINGS); addFont(shortcutSettingsButton_);
         enableFight_ = Make(L"BUTTON", L"AUTO → Đánh quái", BS_AUTOCHECKBOX, 730, 347, 145, 24, IDC_ENABLE_FIGHT); addFont(enableFight_);
         addFont(Make(L"STATIC", L"Không foreground/không chiếm chuột", 0, 878, 350, 145, 22, 0));
-        addFont(Make(L"BUTTON", L"TEST MỞ TAY NẢI • KHÔNG CLICK", BS_PUSHBUTTON, 18, 386, 290, 30, IDC_TEST_OPEN_BAG));
+        testOpenBagButton_ = Make(L"BUTTON", L"TEST MỞ TAY NẢI • KHÔNG CLICK", BS_PUSHBUTTON, 18, 112, 290, 30, IDC_TEST_OPEN_BAG); addFont(testOpenBagButton_);
+        if (testOpenBagButton_) ShowWindow(testOpenBagButton_, SW_HIDE);
 
         // Dòng mô tả kỹ thuật InputSync/callback được ẩn khỏi giao diện khách hàng.
         addFont(Make(L"BUTTON", L"LẤY 3 CLICK CỦA ACC...", BS_PUSHBUTTON, 755, 526, 268, 27, IDC_COPY_CLICKS));
@@ -1995,10 +1998,17 @@ private:
         sellMacroControls_.push_back(Make(L"BUTTON", L"TEST 1 CLICK", BS_PUSHBUTTON, 808, 818, 166, 27, IDC_SELL_TEST));
         for (HWND h : sellMacroControls_) if (h) ShowWindow(h, SW_HIDE);
 
-        logCaption_ = Make(L"STATIC", L"LOG / BỘ ĐIỀU PHỐI", 0, 18, 742, 190, 20, 0); addFont(logCaption_);
-        log_ = Make(L"EDIT", L"", WS_BORDER | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL, 18, 764, 1005, 159, IDC_LOG); addFont(log_);
+        logCaption_ = Make(L"STATIC", L"LOG / BỘ ĐIỀU PHỐI", 0, 18, 160, 190, 20, 0); addFont(logCaption_);
+        log_ = Make(L"EDIT", L"", WS_BORDER | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL, 18, 184, 1005, 730, IDC_LOG); addFont(log_);
         if (logCaption_) ShowWindow(logCaption_, SW_HIDE);
-        if (log_) ShowWindow(log_, SW_HIDE); // vẫn ghi log nội bộ nhưng không hiện vùng debug
+        if (log_) ShowWindow(log_, SW_HIDE); // Developer-only display; logging stays active while hidden.
+
+        developerPasswordLabel_ = Make(L"STATIC", L"DEVELOPER • nhập mật khẩu", SS_LEFT | SS_CENTERIMAGE, 18, 62, 250, 24, 0); addFont(developerPasswordLabel_);
+        developerPassword_ = Make(L"EDIT", L"", WS_BORDER | ES_PASSWORD | ES_AUTOHSCROLL, 18, 88, 290, 27, IDC_DEVELOPER_PASSWORD); addFont(developerPassword_);
+        developerControls_ = {developerPasswordLabel_, developerPassword_};
+        developerUnlockedControls_ = {testOpenBagButton_, logCaption_, log_};
+        for (HWND h : developerControls_) if (h) ShowWindow(h, SW_HIDE);
+        for (HWND h : developerUnlockedControls_) if (h) ShowWindow(h, SW_HIDE);
 
         // v0.6 TELEGRAM is a pure observer/output tab. None of these controls participate
         // in click lease, World Flow, scanner, P1/P2/P3, Sell or Trade state machines.
@@ -2134,9 +2144,33 @@ private:
         return std::find(telegramControls_.begin(), telegramControls_.end(), h) != telegramControls_.end();
     }
 
+    bool IsDeveloperControl(HWND h) const {
+        return std::find(developerControls_.begin(), developerControls_.end(), h) != developerControls_.end() ||
+               std::find(developerUnlockedControls_.begin(), developerUnlockedControls_.end(), h) != developerUnlockedControls_.end();
+    }
+
+    void ShowDeveloperControls(bool showPage) {
+        const bool showAuth = showPage && !developerUnlocked_;
+        const bool showUnlocked = showPage && developerUnlocked_;
+        for (HWND h : developerControls_) if (h) ShowWindow(h, showAuth ? SW_SHOW : SW_HIDE);
+        for (HWND h : developerUnlockedControls_) if (h) ShowWindow(h, showUnlocked ? SW_SHOW : SW_HIDE);
+        if (showAuth && developerPassword_) SetFocus(developerPassword_);
+    }
+
+    void TryUnlockDeveloper() {
+        if (developerUnlocked_ || !developerPassword_) return;
+        wchar_t password[32]{};
+        GetWindowTextW(developerPassword_, password, static_cast<int>(_countof(password)));
+        if (std::wstring(password) != L"191296") return;
+        developerUnlocked_ = true;
+        SetWindowTextW(developerPassword_, L"");
+        if (mainTabIndex_ == 5) ShowDeveloperControls(true);
+        Log(L"DEVELOPER: mở khóa thành công.");
+    }
+
     void SwitchMainTab(int index) {
         if (!mainTab_) return;
-        index = std::clamp(index, 0, 4);
+        index = std::clamp(index, 0, 5);
 
         if (index == 1 || index == 2) {
             const wchar_t* feature = index == 1 ? L"AUTO" : L"AUTO PHÓ BẢN";
@@ -2151,7 +2185,7 @@ private:
         if (mainTabIndex_ == 0) {
             autoTabVisibility_.clear();
             for (HWND child = GetWindow(hwnd_, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT)) {
-                if (child == mainTab_ || IsAboutControl(child) || IsTelegramControl(child)) continue;
+                if (child == mainTab_ || IsAboutControl(child) || IsTelegramControl(child) || IsDeveloperControl(child)) continue;
                 autoTabVisibility_.push_back({child, IsWindowVisible(child) != FALSE});
                 ShowWindow(child, SW_HIDE);
             }
@@ -2159,21 +2193,30 @@ private:
             for (HWND h : telegramControls_) if (h) ShowWindow(h, SW_HIDE);
         } else if (mainTabIndex_ == 4) {
             for (HWND h : aboutControls_) if (h) ShowWindow(h, SW_HIDE);
+        } else if (mainTabIndex_ == 5) {
+            ShowDeveloperControls(false);
         }
 
         if (index == 0) {
             for (HWND h : telegramControls_) if (h) ShowWindow(h, SW_HIDE);
             for (HWND h : aboutControls_) if (h) ShowWindow(h, SW_HIDE);
+            ShowDeveloperControls(false);
             for (const auto& saved : autoTabVisibility_) {
                 if (saved.first && IsWindow(saved.first)) ShowWindow(saved.first, saved.second ? SW_SHOW : SW_HIDE);
             }
             autoTabVisibility_.clear();
         } else if (index == 3) {
             for (HWND h : aboutControls_) if (h) ShowWindow(h, SW_HIDE);
+            ShowDeveloperControls(false);
             for (HWND h : telegramControls_) if (h) ShowWindow(h, SW_SHOW);
+        } else if (index == 4) {
+            for (HWND h : telegramControls_) if (h) ShowWindow(h, SW_HIDE);
+            ShowDeveloperControls(false);
+            for (HWND h : aboutControls_) if (h) ShowWindow(h, SW_SHOW);
         } else {
             for (HWND h : telegramControls_) if (h) ShowWindow(h, SW_HIDE);
-            for (HWND h : aboutControls_) if (h) ShowWindow(h, SW_SHOW);
+            for (HWND h : aboutControls_) if (h) ShowWindow(h, SW_HIDE);
+            ShowDeveloperControls(true);
         }
         mainTabIndex_ = index;
     }
@@ -6722,6 +6765,21 @@ private:
                 return;
             }
 
+            Response tradeCallbackResponse{};
+            std::wstring tradeCallbackError;
+            const bool tradeCallbackOk = activeChild->bridge.Call(
+                Command::ClickTravelSemantic, static_cast<int>(TravelSemantic::Trade),
+                0, 0, tradeCallbackResponse, tradeCallbackError, 1100);
+            if (!tradeCallbackOk ||
+                tradeCallbackResponse.resultCode != static_cast<std::int32_t>(ActionResult::ActionInvoked)) {
+                tradeTxn_.targetRetryTick = GetTickCount() + kTradeTargetRetryMs;
+                const std::wstring detail = !tradeCallbackError.empty() ? tradeCallbackError :
+                    (tradeCallbackResponse.detail[0] ? std::wstring(tradeCallbackResponse.detail) : L"chưa thấy dòng Giao dịch");
+                LogAccount(*activeChild, L"GIAO DỊCH CALLBACK WAIT • " + detail);
+                return;
+            }
+            LogAccount(*activeChild, L"GIAO DỊCH CALLBACK PASS • " + std::wstring(tradeCallbackResponse.detail));
+
             tradeTxn_.phase = TradePhase::Sequence;
             tradeTxn_.sequenceIndex = 0;
             tradeTxn_.sequenceRepeatDone = 0;
@@ -9700,6 +9758,9 @@ private:
                 return 0;
             case WM_COMMAND:
                 switch (LOWORD(wp)) {
+                    case IDC_DEVELOPER_PASSWORD:
+                        if (HIWORD(wp) == EN_CHANGE) TryUnlockDeveloper();
+                        break;
                     case IDC_TG_SHOW_TOKEN:
                         if (HIWORD(wp) == BN_CLICKED) ToggleTelegramTokenVisible();
                         break;
@@ -9984,10 +10045,16 @@ private:
     HWND compactButton_ = nullptr;
     std::array<HWND, 5> pointLabels_{};
     HWND log_ = nullptr;
+    HWND testOpenBagButton_ = nullptr;
+    HWND developerPasswordLabel_ = nullptr;
+    HWND developerPassword_ = nullptr;
     HWND mainTab_ = nullptr;
     int mainTabIndex_ = 0;
+    bool developerUnlocked_ = false;
     std::vector<HWND> aboutControls_{};
     std::vector<HWND> telegramControls_{};
+    std::vector<HWND> developerControls_{};
+    std::vector<HWND> developerUnlockedControls_{};
     HFONT aboutHeadingFont_ = nullptr;
     HFONT aboutNameFont_ = nullptr;
     HFONT aboutUpcomingFont_ = nullptr;
