@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.cp9_payload/**'
+      - '.cp9_payload/READY'
 
 permissions:
   contents: write
@@ -24,50 +24,26 @@ jobs:
       - name: Materialize reviewed CP9 source payload
         shell: powershell
         run: |
-          $parts=@(
-            '.cp9_payload/part01.bin',
-            '.cp9_payload/part02.bin',
-            '.cp9_payload/part03.bin'
-          )
-          foreach($p in $parts){ if(!(Test-Path $p)){ throw "missing CP9 payload chunk: $p" } }
-          $payload='cp9_source_payload.zip'
-          $decodedParts=New-Object System.Collections.Generic.List[byte[]]
-          $individualOk=$true
-          foreach($p in $parts){
-            try {
-              $text=([IO.File]::ReadAllText($p) -replace '\s','')
-              $decodedParts.Add([Convert]::FromBase64String($text))
-            } catch {
-              $individualOk=$false
-              break
-            }
-          }
+          $parts = Get-ChildItem '.cp9_payload/xz/*.txt' | Sort-Object Name
+          if($parts.Count -ne 22){ throw "expected 22 CP9 payload chunks, got $($parts.Count)" }
+          $encoded = ($parts | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join ''
+          $encoded = $encoded -replace '\s',''
           try {
-            if($individualOk){
-              $stream=[IO.File]::Create($payload)
-              try {
-                foreach($chunk in $decodedParts){ $stream.Write($chunk,0,$chunk.Length) }
-              } finally { $stream.Dispose() }
-              Write-Host 'CP9 payload reconstructed by decoding each staged chunk.'
-            } else {
-              $encoded = ($parts | ForEach-Object { [IO.File]::ReadAllText($_) }) -join ''
-              $encoded = $encoded -replace '\s',''
-              [IO.File]::WriteAllBytes($payload,[Convert]::FromBase64String($encoded))
-              Write-Host 'CP9 payload reconstructed from concatenated base64 stream.'
-            }
+            $bytes = [Convert]::FromBase64String($encoded)
+            [IO.File]::WriteAllBytes('cp9_source_payload.tar.xz',$bytes)
           } catch {
             throw "CP9 payload base64 reconstruction failed: $($_.Exception.Message)"
           }
-          try {
-            Expand-Archive -Path $payload -DestinationPath . -Force
-          } catch {
-            throw "CP9 payload reconstruction/extraction failed: $($_.Exception.Message)"
-          }
-          Remove-Item $payload -Force
+          $expected='9d491039c0ba08043aeb20de185bf377dbf053f90ac835de1214c16269012520'
+          $actual=(Get-FileHash 'cp9_source_payload.tar.xz' -Algorithm SHA256).Hash.ToLower()
+          if($actual -ne $expected){ throw "CP9 payload SHA256 mismatch: $actual" }
+          python -c "import tarfile; tarfile.open(r'cp9_source_payload.tar.xz','r:xz').extractall(r'.')"
+          if($LASTEXITCODE -ne 0){ throw 'CP9 tar.xz extraction failed' }
+          Remove-Item cp9_source_payload.tar.xz -Force
           Remove-Item .cp9_payload -Recurse -Force
           if(!(Test-Path 'tools/test_v99_automation_cp9_contract.py')){ throw 'CP9 contract file missing after extraction' }
           if(!(Select-String -Path 'CMakeLists.txt' -Pattern 'apply_v99_automation_cp9.py' -Quiet)){ throw 'CP9 CMake wiring missing after extraction' }
-          Write-Host 'CP9 source payload materialized successfully.'
+          Write-Host 'CP9 source payload materialized and SHA256 verified.'
 
       - name: Verify v9.9 defense and obfuscation contracts
         shell: powershell
