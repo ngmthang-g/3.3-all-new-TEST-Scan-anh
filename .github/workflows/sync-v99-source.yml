@@ -1,0 +1,56 @@
+name: One-time sync PRO MAX v9.9 source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/sync-v99-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-v99-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download and verify exact v9.9 source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC_URL='https://raw.githubusercontent.com/ngmthang-g/Du-an-AUTO-cho-kHach-/f27f3109709b3ac4de99c0efb46149a02fa5be49/dist/Auto-don-do-Than-Long-PRO-MAX-v9.9-DAC-BIET-source.zip'
+          EXPECTED='a9394ddd9499c670799ff4173d823cff229c1a1a6c0bbd7863bf27cd6cb1e7b0'
+          curl -fL "$SRC_URL" -o /tmp/v99-source.zip
+          echo "$EXPECTED  /tmp/v99-source.zip" | sha256sum -c -
+          rm -rf /tmp/v99-source
+          mkdir -p /tmp/v99-source
+          unzip -q /tmp/v99-source.zip -d /tmp/v99-source
+          test -f /tmp/v99-source/src/controller.cpp
+          test -f /tmp/v99-source/src/bridge.cpp
+          test -f /tmp/v99-source/VERSION.txt
+
+      - name: Replace repository tree with verified v9.9 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --delete --exclude='.git/' /tmp/v99-source/ ./
+          git status --short
+
+      - name: Commit synchronized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'Repository already matches v9.9 source.'
+            exit 0
+          fi
+          git commit -m 'sync: replace TEST repo with PRO MAX v9.9 source [skip ci]'
+          git push origin HEAD:main
