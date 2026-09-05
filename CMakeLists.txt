@@ -84,6 +84,13 @@ execute_process(
 if(NOT TL_AUTOMATION_CP3_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "V9.9 automation CP3 bulk/gather integration failed")
 endif()
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/apply_v99_automation_cp4.py"
+            --source-root "${CMAKE_SOURCE_DIR}" --output-dir "${TL_IMAGE_SCAN_GEN_DIR}"
+    RESULT_VARIABLE TL_AUTOMATION_CP4_PATCH_RESULT)
+if(NOT TL_AUTOMATION_CP4_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "V9.9 automation CP4 AUTO PARTY integration failed")
+endif()
 
 add_library(ThanLongCleanRouteBridge SHARED "${TL_IMAGE_SCAN_GEN_DIR}/bridge.cpp")
 target_include_directories(ThanLongCleanRouteBridge PRIVATE "${TL_IMAGE_SCAN_GEN_DIR}" src)
@@ -125,6 +132,8 @@ add_executable(telegram_logic_tests src/telegram_logic_test.cpp)
 target_include_directories(telegram_logic_tests PRIVATE src)
 add_executable(automation_bulk_logic_tests src/automation_bulk_logic_test.cpp)
 target_include_directories(automation_bulk_logic_tests PRIVATE src)
+add_executable(party_build_logic_tests src/party_build_logic_test.cpp)
+target_include_directories(party_build_logic_tests PRIVATE src)
 if(MSVC)
     # Native release hardening. This raises the cost of reverse engineering and
     # exploitation, but no client-side binary can be made impossible to inspect.
@@ -135,7 +144,7 @@ if(MSVC)
     target_link_options(ThanLongCleanRouteBridge PRIVATE ${TL_HARDEN_LINK_OPTIONS})
     target_compile_options(ThanLongItemConsolidator PRIVATE ${TL_HARDEN_COMPILE_OPTIONS})
     target_link_options(ThanLongItemConsolidator PRIVATE ${TL_HARDEN_LINK_OPTIONS})
-    foreach(t ThanLongItemConsolidator route_logic_tests trade_coordinator_logic_tests background_ui_logic_tests fixed_slot_sell_logic_tests unity_geometry_logic_tests internal_ui_click_logic_tests travel_fight_guard_logic_tests auto_fight_retry_logic_tests telegram_logic_tests automation_bulk_logic_tests)
+    foreach(t ThanLongItemConsolidator route_logic_tests trade_coordinator_logic_tests background_ui_logic_tests fixed_slot_sell_logic_tests unity_geometry_logic_tests internal_ui_click_logic_tests travel_fight_guard_logic_tests auto_fight_retry_logic_tests telegram_logic_tests automation_bulk_logic_tests party_build_logic_tests)
         target_compile_options(${t} PRIVATE /utf-8 /W4 /permissive-)
     endforeach()
 endif()
