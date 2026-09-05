@@ -1,0 +1,35 @@
+name: Debug CP2 precheck
+
+on:
+  push:
+    branches: [feature/v99-automation-suite]
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run CP2 contract and capture output
+        shell: powershell
+        run: |
+          python tools/test_v4_precheck_contract.py *> cp2-contract.log
+          $code=$LASTEXITCODE
+          "exit_code=$code" | Add-Content cp2-contract.log
+          Set-Content cp2-exit.txt $code
+          exit 0
+      - name: Upload CP2 log
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp2-contract-log
+          path: |
+            cp2-contract.log
+            cp2-exit.txt
+          if-no-files-found: error
+      - name: Fail if contract failed
+        shell: powershell
+        run: |
+          $code=[int](Get-Content cp2-exit.txt)
+          if($code -ne 0){throw "CP2 contract failed with exit code $code"}
