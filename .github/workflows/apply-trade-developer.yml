@@ -35,6 +35,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/protocol.h src/bridge.cpp src/controller.cpp .github/workflows/build-v99-special.yml
+          git add src/protocol.h src/bridge.cpp src/controller.cpp
           git commit -m 'feat: callback Giao dich after target MAIN and add developer tab'
           git push origin HEAD:feature/trade-callback-developer
