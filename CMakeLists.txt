@@ -98,6 +98,13 @@ execute_process(
 if(NOT TL_AUTOMATION_CP5_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "V9.9 automation CP5 final regression hardening failed")
 endif()
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/apply_v99_automation_cp6.py"
+            --source-root "${CMAKE_SOURCE_DIR}" --output-dir "${TL_IMAGE_SCAN_GEN_DIR}"
+    RESULT_VARIABLE TL_AUTOMATION_CP6_PATCH_RESULT)
+if(NOT TL_AUTOMATION_CP6_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "V9.9 automation CP6 gather/train + minimal party popup integration failed")
+endif()
 
 add_library(ThanLongCleanRouteBridge SHARED "${TL_IMAGE_SCAN_GEN_DIR}/bridge.cpp")
 target_include_directories(ThanLongCleanRouteBridge PRIVATE "${TL_IMAGE_SCAN_GEN_DIR}" src)
