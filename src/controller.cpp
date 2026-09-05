@@ -174,7 +174,7 @@ constexpr int IDC_EXPORT_MAP_CONFIG = 212;
 constexpr int IDC_IMPORT_MAP_CONFIG = 213;
 constexpr int IDC_ENABLE_SHORTCUT = 214;
 constexpr int IDC_SHORTCUT_SETTINGS = 215;
-constexpr int IDC_TEST_OPEN_BAG = 216; // TEST-ONLY semantic open bag probe
+constexpr int IDC_TEST_OPEN_BAG = 5000; // TEST-ONLY semantic open bag probe
 // Shortcut settings secondary window. 630-699 is isolated from inventory/Telegram IDs.
 constexpr int IDC_SC_THEME = 630;
 constexpr int IDC_SC_KUNLUN_X = 631;
