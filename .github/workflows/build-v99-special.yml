@@ -31,13 +31,14 @@ jobs:
           )
           foreach($p in $parts){ if(!(Test-Path $p)){ throw "missing CP9 payload chunk: $p" } }
           $payload='cp9_source_payload.zip'
-          $stream=[IO.File]::Create($payload)
           try {
-            foreach($p in $parts){
-              $bytes=[IO.File]::ReadAllBytes($p)
-              $stream.Write($bytes,0,$bytes.Length)
-            }
-          } finally { $stream.Dispose() }
+            $encoded = ($parts | ForEach-Object { [IO.File]::ReadAllText($_) }) -join ''
+            $encoded = $encoded -replace '\s',''
+            $bytes = [Convert]::FromBase64String($encoded)
+            [IO.File]::WriteAllBytes($payload,$bytes)
+          } catch {
+            throw "CP9 payload base64 reconstruction failed: $($_.Exception.Message)"
+          }
           try {
             Expand-Archive -Path $payload -DestinationPath . -Force
           } catch {
@@ -173,14 +174,12 @@ jobs:
           Copy-Item build/Release/ThanLongItemConsolidator.exe (Join-Path dist $exeName) -Force
           Copy-Item build/Release/ThanLongCleanRouteBridge.dll dist/ThanLongCleanRouteBridge.dll -Force
           Compress-Archive -Path (Join-Path dist $exeName),dist/ThanLongCleanRouteBridge.dll -DestinationPath (Join-Path dist $zipName) -CompressionLevel Optimal -Force
-          # Stage the verified overlay first so the source ZIP is built from the exact CP9 tree that produced the EXE.
           git add -A
           if ($LASTEXITCODE -ne 0) { throw 'git add verified CP9 tree failed' }
           $tree=(git write-tree).Trim()
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tree)) { throw 'git write-tree failed' }
           git archive --format=zip "--output=$sourcePath" $tree -- . ':(exclude)dist'
           if ($LASTEXITCODE -ne 0) { throw 'source archive failed' }
-          # dist is created after the tree snapshot; stage it too for the publish commit.
           git add -A -f dist
           if ($LASTEXITCODE -ne 0) { throw 'git add dist failed' }
           $items=@((Join-Path dist $exeName),'dist/ThanLongCleanRouteBridge.dll',(Join-Path dist $zipName),(Join-Path dist $sourceName))
@@ -202,7 +201,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           Remove-Item build -Recurse -Force -ErrorAction SilentlyContinue
-          # The index already contains the exact verified CP9 source tree plus dist.
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
             git commit -m "build: publish verified CP9 source + Auto don do Than Long PRO MAX v9.9 SPECIAL [skip ci]"
