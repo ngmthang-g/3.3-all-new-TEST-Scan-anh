@@ -117,8 +117,9 @@ assert 'RequestImageScanTest();' in C
 assert 'DialogBoxParamW' in C
 assert 'L"961912"' in C
 resource = (ROOT / 'resources' / 'app.rc').read_text(encoding='utf-8-sig')
-for token in ['9100 DIALOGEX', 'EDITTEXT 9101', 'ES_PASSWORD']:
-    assert token in resource, token
+assert '9100 DIALOGEX' in resource
+assert re.search(r'EDITTEXT\s+9101\s*,', resource), 'V4 password edit missing'
+assert 'ES_PASSWORD' in resource
 
 # Full master export/import still carries the legacy storage key so existing files work.
 for token in [
