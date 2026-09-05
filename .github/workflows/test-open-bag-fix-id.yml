@@ -1,0 +1,40 @@
+name: Fix isolated TEST OPEN BAG control ID
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-open-bag-fix-id.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-id:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Change isolated test control ID only
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/controller.cpp')
+          b=p.read_bytes()
+          old=b'constexpr int IDC_TEST_OPEN_BAG = 216; // TEST-ONLY semantic open bag probe'
+          new=b'constexpr int IDC_TEST_OPEN_BAG = 5000; // TEST-ONLY semantic open bag probe'
+          if b.count(old)!=1:
+              raise SystemExit(f'expected one old ID, found {b.count(old)}')
+          b=b.replace(old,new,1)
+          p.write_bytes(b)
+          print('TEST OPEN BAG control ID 216 -> 5000 PASS')
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/controller.cpp
+          git commit -m 'test: isolate open-bag control ID from UI30 [skip ci]'
+          git push origin HEAD:main
